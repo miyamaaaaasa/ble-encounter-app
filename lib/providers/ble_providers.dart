@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../core/peer_id.dart';
@@ -57,12 +58,36 @@ class AppNotifier extends Notifier<AppState> {
 
   final _cooldown = <String, DateTime>{};
 
-  StreamSubscription<EncounterEvent>? _encounterSub;
+  StreamSubscription<EncounterEvent>?       _encounterSub;
+  StreamSubscription<BluetoothAdapterState>? _btStateSub;
 
   @override
   AppState build() {
     _loadData();
+    // Bluetooth ON/OFF に連動して自動起動・停止する
+    _btStateSub = FlutterBluePlus.adapterState.listen(_onBluetoothState);
     return const AppState();
+  }
+
+  // Bluetooth アダプター状態の変化を処理
+  Future<void> _onBluetoothState(BluetoothAdapterState btState) async {
+    debugPrint('[App] BT state: $btState');
+    if (btState == BluetoothAdapterState.on) {
+      // ロード完了済み & プロフィールあり & 未起動 のとき自動起動
+      if (!state.isLoading && state.ownProfile != null && !state.isRunning) {
+        await start();
+      }
+    } else if (btState == BluetoothAdapterState.off ||
+               btState == BluetoothAdapterState.turningOff) {
+      if (state.isRunning) {
+        // BT が切れた — スキャンを停止してUIを更新（advertiser は OS が自動停止）
+        await _encounterSub?.cancel();
+        _encounterSub = null;
+        try { await _scanner.stop(); } catch (_) {}
+        state = state.copyWith(isRunning: false, errorMessage: null);
+        debugPrint('[App] BT off — stopped');
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -140,8 +165,20 @@ class AppNotifier extends Notifier<AppState> {
       return;
     }
 
+    // BT が無効なら黙って返る（adapterState リスナーが ON になったとき再度呼ぶ）
     try {
+      final btState = await FlutterBluePlus.adapterState.first;
+      if (btState != BluetoothAdapterState.on) {
+        debugPrint('[App] BT not ready ($btState), waiting...');
+        return;
+      }
+    } catch (_) {}
+
+    try {
+      // 既存のサブスクリプションをクリーンアップしてから再登録
+      await _encounterSub?.cancel();
       _encounterSub = _scanner.encounters.listen(_onEncounter);
+
       await _advertiser.startForegroundService();
       await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload());
       await _scanner.start();
@@ -157,7 +194,7 @@ class AppNotifier extends Notifier<AppState> {
       }
     } catch (e) {
       debugPrint('[App] start error: $e');
-      state = state.copyWith(errorMessage: '起動エラー: $e');
+      state = state.copyWith(isRunning: false, errorMessage: '起動エラー: $e');
     }
   }
 
@@ -246,6 +283,7 @@ class AppNotifier extends Notifier<AppState> {
 
   @override
   void dispose() {
+    _btStateSub?.cancel();
     _encounterSub?.cancel();
     _scanner.dispose();
   }
