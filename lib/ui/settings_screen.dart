@@ -33,8 +33,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       info = await PackageInfo.fromPlatform();
     } catch (_) {
       info = PackageInfo(
-          appName: 'すれ違い', packageName: '',
-          version: '1.4.0', buildNumber: '6');
+          appName: 'はじめましてこんにちは', packageName: '',
+          version: '1.5.1', buildNumber: '8');
     }
     if (!mounted) return;
     setState(() {
@@ -44,7 +44,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _eventEnabled     = settings.eventEnabled;
       _soundEnabled     = settings.soundEnabled;
       _vibrationEnabled = settings.vibrationEnabled;
-      _version          = 'v${info.version}';
+      _version          = 'beta${info.version}';  // beta表記を強制
     });
   }
 

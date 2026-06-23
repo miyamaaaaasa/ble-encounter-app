@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/own_profile.dart';
 import '../models/template_message.dart';
 import '../providers/ble_providers.dart';
+import '../services/notification_service.dart';
 import 'encounter_helpers.dart';
 
 final _asciiFormatter =
@@ -24,6 +25,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _nameCtrl;
   late int _colorIndex;
   late TemplateMessage _template;
+  // 初回セットアップ専用: 通知（開門）時刻。null のままだと保存不可。
+  int? _initialHour;
 
   @override
   void initState() {
@@ -56,7 +59,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Name is required')),
+        const SnackBar(content: Text('名前は必須です')),
+      );
+      return;
+    }
+    // 初回セットアップ: 通知時刻が未選択なら保存不可
+    if (widget.isFirstLaunch && _initialHour == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('夜の開門時刻を選択してください')),
       );
       return;
     }
@@ -69,9 +79,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             registeredAt: existing?.registeredAt,
           ),
         );
+    // 初回セットアップ時のみ: 7日ロックを発動させずに時刻を設定
+    if (widget.isFirstLaunch && _initialHour != null) {
+      await NotificationService.setInitialHour(_initialHour!);
+    }
     if (!widget.isFirstLaunch && context.mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Saved')));
+          .showSnackBar(const SnackBar(content: Text('保存しました')));
     }
   }
 
@@ -305,6 +319,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 }),
               ),
 
+              // ─── 初回セットアップ: 開門時刻（必須）────────────────────────
+              if (widget.isFirstLaunch) ...[
+                const SizedBox(height: 24),
+                const Divider(),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.lock_clock_outlined, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '夜の開門・通知時刻 ※必須',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _initialHour == null
+                                  ? Theme.of(context).colorScheme.error
+                                  : null,
+                            ),
+                          ),
+                          Text(
+                            '今日すれ違った人を確認できる時刻です（設定後は1週間変更不可）',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(context).colorScheme.outline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    DropdownButton<int>(
+                      value: _initialHour,
+                      hint: const Text('未選択'),
+                      items: NotificationService.fixedHours
+                          .map((h) => DropdownMenuItem(
+                                value: h,
+                                child: Text(
+                                    '${h.toString().padLeft(2, '0')}:00'),
+                              ))
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => _initialHour = v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+              ],
+
               if (registeredAt != null) ...[
                 const SizedBox(height: 24),
                 const Divider(),
@@ -335,7 +400,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ? Icons.arrow_forward
                     : Icons.check),
                 label:
-                    Text(widget.isFirstLaunch ? 'Start' : '保存'),
+                    Text(widget.isFirstLaunch ? 'はじめる' : '保存'),
                 style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(52)),
               ),

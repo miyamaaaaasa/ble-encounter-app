@@ -71,6 +71,7 @@ class AppNotifier extends Notifier<AppState> {
 
   // peerId → 最後に notification を schedule した時刻（1日1回制限）
   final _notifScheduled = <String, DateTime>{};
+  bool _userStopped = false; // 手動停止後は BT 復帰時に自動起動しない
 
   StreamSubscription<EncounterEvent>?        _encounterSub;
   StreamSubscription<String>?                _departureSub;
@@ -86,7 +87,9 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> _onBluetoothState(BluetoothAdapterState btState) async {
     debugPrint('[App] BT state: $btState');
     if (btState == BluetoothAdapterState.on) {
-      if (!state.isLoading && state.ownProfile != null && !state.isRunning) {
+      // 手動停止中は BT 復帰時に自動起動しない
+      if (!_userStopped && !state.isLoading &&
+          state.ownProfile != null && !state.isRunning) {
         await start();
       }
     } else if (btState == BluetoothAdapterState.off ||
@@ -96,8 +99,18 @@ class AppNotifier extends Notifier<AppState> {
         _encounterSub = null;
         await _departureSub?.cancel();
         _departureSub = null;
-        try { await _scanner.stop(); } catch (_) {}
+        try { await _scanner.stop(); } catch (e) {
+          debugPrint('[App] scanner stop error: $e');
+        }
+        // BT 強制 OFF 時もアドバタイズを明示的に停止
+        try { await _advertiser.stopAdvertise(); } catch (e) {
+          debugPrint('[App] stopAdvertise(bt-off) error: $e');
+        }
+        try { await _advertiser.stopForegroundService(); } catch (e) {
+          debugPrint('[App] stopForegroundService(bt-off) error: $e');
+        }
         state = state.copyWith(isRunning: false, errorMessage: null);
+        debugPrint('[App] BT off — fully stopped');
       }
     }
   }
@@ -186,6 +199,7 @@ class AppNotifier extends Notifier<AppState> {
   // ─── Start ───────────────────────────────────────────────────────────────
 
   Future<void> start() async {
+    _userStopped = false; // 明示的に起動 → 手動停止フラグをリセット
     if (state.isRunning) return;
     final profile = state.ownProfile;
     if (profile == null) {
@@ -227,17 +241,26 @@ class AppNotifier extends Notifier<AppState> {
   // ─── Stop ────────────────────────────────────────────────────────────────
 
   Future<void> stop() async {
+    _userStopped = true; // 手動停止 → BT 復帰後も自動起動しない
     if (!state.isRunning) return;
     await _encounterSub?.cancel();
     await _departureSub?.cancel();
     _encounterSub = null;
     _departureSub = null;
-    await _scanner.stop();
-    try {
-      await _advertiser.stopAdvertise();
-      await _advertiser.stopForegroundService();
-    } catch (_) {}
+    // スキャン停止
+    try { await _scanner.stop(); } catch (e) {
+      debugPrint('[App] scanner stop error: $e');
+    }
+    // アドバタイズ停止（送信シャットダウン）
+    try { await _advertiser.stopAdvertise(); } catch (e) {
+      debugPrint('[App] stopAdvertise error: $e');
+    }
+    // フォアグラウンドサービス停止
+    try { await _advertiser.stopForegroundService(); } catch (e) {
+      debugPrint('[App] stopForegroundService error: $e');
+    }
     state = state.copyWith(isRunning: false);
+    debugPrint('[App] fully stopped (scan + advertise)');
   }
 
   void clearNewEncounterFlag() {

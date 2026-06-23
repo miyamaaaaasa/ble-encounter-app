@@ -141,6 +141,12 @@ class NotificationService {
     }
   }
 
+  // 初回セットアップ専用: 7日ロックを発動させずに時刻を設定する
+  static Future<void> setInitialHour(int hour) async {
+    await scheduleDailyNotification(hour: hour);
+    // _recordTimeChange() は呼ばない → ロックカウントを開始しない
+  }
+
   // 時刻変更（7日ロックチェック済みで呼ぶこと）
   static Future<void> changeHour(int hour) async {
     await _recordTimeChange();

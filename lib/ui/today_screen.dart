@@ -415,115 +415,155 @@ class _EncounterCard extends StatelessWidget {
     final rarity  = cardRarityOf(encounter.meetCount);
     final tmpl    = encounter.template;
 
+    // レアリティに応じたカード背景装飾
+    final cardBg = _rarityCardBackground(rarity, context);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Column(
         children: [
           Expanded(
-            child: Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              clipBehavior: Clip.antiAlias,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // レアリティバッジ
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: rarityBorderColor(rarity).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: rarityBorderColor(rarity)),
-                      ),
-                      child: Text(
-                        rarityLabel(rarity),
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: rarityBorderColor(rarity)),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // アバター
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                              color: color.withOpacity(0.4),
-                              blurRadius: 20,
-                              spreadRadius: 4),
-                        ],
-                      ),
-                      child: CircleAvatar(
-                        radius: 56,
-                        backgroundColor: color,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: rarityBorderColor(rarity).withOpacity(0.3),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  decoration: cardBg,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // レアリティラベル（枠のみ、回数は非表示）
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: rarityBorderColor(rarity).withOpacity(0.7)),
+                        ),
                         child: Text(
-                          initial,
-                          style: const TextStyle(
-                              fontSize: 48,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold),
+                          rarityLabel(rarity),
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: rarity == CardRarity.common
+                                  ? rarityBorderColor(rarity)
+                                  : Colors.white),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 24),
 
-                    // 名前
-                    Text(
-                      encounter.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 24),
-
-                    const Divider(),
-                    const SizedBox(height: 12),
-
-                    // 詳細情報
-                    _InfoRow(icon: Icons.handshake_outlined,
-                        label: 'すれ違い回数', value: '${encounter.meetCount}回'),
-                    _InfoRow(icon: Icons.calendar_today_outlined,
-                        label: '初めて出会った日', value: fmtDate(encounter.firstMet)),
-                    _InfoRow(icon: Icons.workspace_premium_outlined,
-                        label: 'バッジ', value: '---'),
-
-                    const SizedBox(height: 12),
-                    const Divider(),
-                    const SizedBox(height: 12),
-
-                    // 定型文
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            '💬 "${tmpl.phraseText}"',
+                      // アバター
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                                color: color.withOpacity(0.5),
+                                blurRadius: 24,
+                                spreadRadius: 6),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 56,
+                          backgroundColor: color,
+                          child: Text(
+                            initial,
                             style: const TextStyle(
-                                fontSize: 15, fontStyle: FontStyle.italic),
-                            textAlign: TextAlign.center,
+                                fontSize: 48,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${tmpl.statusText}  ·  ${tmpl.hobbyCategoryText}',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.outline),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+
+                      // 名前
+                      Text(
+                        encounter.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: rarity == CardRarity.common ? null : Colors.white,
+                            ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      Divider(
+                        color: rarity == CardRarity.common
+                            ? null
+                            : Colors.white.withOpacity(0.4),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 詳細（回数は非表示 → 初めて出会った日のみ）
+                      _InfoRow(
+                          icon: Icons.calendar_today_outlined,
+                          label: '初めて出会った日',
+                          value: fmtDate(encounter.firstMet),
+                          light: rarity != CardRarity.common),
+                      _InfoRow(
+                          icon: Icons.workspace_premium_outlined,
+                          label: 'バッジ',
+                          value: '---',
+                          light: rarity != CardRarity.common),
+
+                      const SizedBox(height: 12),
+                      Divider(
+                        color: rarity == CardRarity.common
+                            ? null
+                            : Colors.white.withOpacity(0.4),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 定型文
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: rarity == CardRarity.common
+                              ? Theme.of(context).colorScheme.surfaceContainerLow
+                              : Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              '💬 "${tmpl.phraseText}"',
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontStyle: FontStyle.italic,
+                                  color: rarity == CardRarity.common
+                                      ? null
+                                      : Colors.white),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${tmpl.statusText}  ·  ${tmpl.hobbyCategoryText}',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: rarity == CardRarity.common
+                                      ? Theme.of(context).colorScheme.outline
+                                      : Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -549,11 +589,55 @@ class _EncounterCard extends StatelessWidget {
   }
 }
 
+// レアリティに応じたカード背景
+BoxDecoration _rarityCardBackground(CardRarity r, BuildContext context) {
+  switch (r) {
+    case CardRarity.hologram:
+      return const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFB721FF), Color(0xFF21D4FD),
+                   Color(0xFFFF6B6B), Color(0xFFFFE66D)],
+          stops: [0.0, 0.33, 0.66, 1.0],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      );
+    case CardRarity.gradient:
+      return const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      );
+    case CardRarity.craft:
+      return const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFD4A574), Color(0xFFA07850)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      );
+    case CardRarity.common:
+      return BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant, width: 1.5),
+      );
+  }
+}
+
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _InfoRow({required this.icon, required this.label, required this.value});
+  final bool light; // レアリティカード上では白テキスト
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.light = false,
+  });
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -561,16 +645,20 @@ class _InfoRow extends StatelessWidget {
         child: Row(
           children: [
             Icon(icon, size: 16,
-                color: Theme.of(context).colorScheme.outline),
+                color: light ? Colors.white70
+                    : Theme.of(context).colorScheme.outline),
             const SizedBox(width: 8),
             Text(label,
                 style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).colorScheme.outline)),
+                    color: light ? Colors.white70
+                        : Theme.of(context).colorScheme.outline)),
             const Spacer(),
             Text(value,
-                style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600)),
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: light ? Colors.white : null)),
           ],
         ),
       );
