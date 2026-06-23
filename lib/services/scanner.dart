@@ -44,6 +44,8 @@ class BleScanner {
 
   // peerId → 最後に見えた時刻（アクティブ中のみ追跡）
   final _activePeers  = <String, DateTime>{};
+  // peerId → 今の検知セッション内で EncounterEvent を発行済みか（爆増防止）
+  final _emittedPeers = <String>{};
   // macAddress → partial data（profile 未受信分）
   final _partialPeers = <String, _PartialData>{};
 
@@ -55,6 +57,7 @@ class BleScanner {
   Future<void> start() async {
     _stopped = false;
     _activePeers.clear();
+    _emittedPeers.clear();
     _partialPeers.clear();
 
     final adapterState = await FlutterBluePlus.adapterState.first;
@@ -91,6 +94,7 @@ class BleScanner {
     _scanSub = null;
     if (FlutterBluePlus.isScanningNow) await FlutterBluePlus.stopScan();
     _activePeers.clear();
+    _emittedPeers.clear();
     _partialPeers.clear();
   }
 
@@ -113,6 +117,7 @@ class BleScanner {
     }
     for (final peerId in departed) {
       _activePeers.remove(peerId);
+      _emittedPeers.remove(peerId); // 次回再接近時に再度 emit できるようリセット
       debugPrint('[BleScanner] DEPARTED id=${peerId.substring(28)}');
       _departureCtrl.add(peerId);
     }
@@ -192,6 +197,9 @@ class BleScanner {
   void _tryEmit(String peerId, String mac, String name,
       int colorIndex, TemplateMessage template, int rssi) {
     if (name.isEmpty) return;
+    // 同一スキャンセッション内で同一ピアへの重複 emit を防ぐ（爆増バグ対策）
+    if (_emittedPeers.contains(peerId)) return;
+    _emittedPeers.add(peerId);
     debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name');
     _encounterCtrl.add(EncounterEvent(
       time: DateTime.now(),

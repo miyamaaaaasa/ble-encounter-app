@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -25,7 +24,7 @@ class AppState {
   final List<EncounterRecord> encounters;
   final List<AppBadge> badges;
   final bool hasNewEncounter;
-  final List<AppBadge> newlyEarnedBadges; // 通知表示用
+  final List<AppBadge> newlyEarnedBadges;
   final String? errorMessage;
 
   const AppState({
@@ -69,9 +68,13 @@ class AppNotifier extends Notifier<AppState> {
   final _storage    = ProfileStorage();
   final _rng        = Random();
 
-  // peerId → 最後に notification を schedule した時刻（1日1回制限）
+  // peerId → 最後に notification を schedule した時刻（12時間制限）
   final _notifScheduled = <String, DateTime>{};
-  bool _userStopped = false; // 手動停止後は BT 復帰時に自動起動しない
+  bool _userStopped = false;
+
+  // 間欠スキャンサイクル制御（15秒ON / 585秒OFF）
+  bool   _cycleActive = false;
+  Timer? _cycleTimer;
 
   StreamSubscription<EncounterEvent>?        _encounterSub;
   StreamSubscription<String>?                _departureSub;
@@ -87,7 +90,6 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> _onBluetoothState(BluetoothAdapterState btState) async {
     debugPrint('[App] BT state: $btState');
     if (btState == BluetoothAdapterState.on) {
-      // 手動停止中は BT 復帰時に自動起動しない
       if (!_userStopped && !state.isLoading &&
           state.ownProfile != null && !state.isRunning) {
         await start();
@@ -95,6 +97,7 @@ class AppNotifier extends Notifier<AppState> {
     } else if (btState == BluetoothAdapterState.off ||
                btState == BluetoothAdapterState.turningOff) {
       if (state.isRunning) {
+        _stopCycle();
         await _encounterSub?.cancel();
         _encounterSub = null;
         await _departureSub?.cancel();
@@ -102,7 +105,6 @@ class AppNotifier extends Notifier<AppState> {
         try { await _scanner.stop(); } catch (e) {
           debugPrint('[App] scanner stop error: $e');
         }
-        // BT 強制 OFF 時もアドバタイズを明示的に停止
         try { await _advertiser.stopAdvertise(); } catch (e) {
           debugPrint('[App] stopAdvertise(bt-off) error: $e');
         }
@@ -162,12 +164,9 @@ class AppNotifier extends Notifier<AppState> {
     await _storage.saveOwnProfile(withDate);
     state = state.copyWith(ownProfile: withDate, errorMessage: null);
     if (state.isRunning) {
-      try {
-        await _advertiser.stopAdvertise();
-        await _advertiser.startAdvertise(PeerId.bytes, withDate.toScanPayload());
-      } catch (e) {
-        debugPrint('[App] profile update error: $e');
-      }
+      // プロフィール更新時: 次の ON サイクルで自動的に新プロフィールを使用
+      // (強制再起動は不要)
+      debugPrint('[App] profile updated, next cycle will use new payload');
     } else if (isFirstSave) {
       await _autoStart();
     }
@@ -199,7 +198,7 @@ class AppNotifier extends Notifier<AppState> {
   // ─── Start ───────────────────────────────────────────────────────────────
 
   Future<void> start() async {
-    _userStopped = false; // 明示的に起動 → 手動停止フラグをリセット
+    _userStopped = false;
     if (state.isRunning) return;
     final profile = state.ownProfile;
     if (profile == null) {
@@ -221,10 +220,10 @@ class AppNotifier extends Notifier<AppState> {
       _departureSub = _scanner.departures.listen(_onDeparture);
 
       await _advertiser.startForegroundService();
-      await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload());
-      await _scanner.start();
       state = state.copyWith(isRunning: true, errorMessage: null);
-      debugPrint('[App] started peerId=${PeerId.hex}');
+      debugPrint('[App] cycle started peerId=${PeerId.hex}');
+
+      _startCycle(); // 間欠駆動開始（15秒ON / 585秒OFF）
 
       final notifSettings = await NotificationService.loadSettings();
       if (notifSettings.dailyEnabled) {
@@ -238,29 +237,75 @@ class AppNotifier extends Notifier<AppState> {
     }
   }
 
+  // ─── 間欠スキャンサイクル ─────────────────────────────────────────────────
+
+  void _startCycle() {
+    _cycleActive = true;
+    _cycleTimer?.cancel();
+    _doCycleOn(); // 即時1回目を開始
+  }
+
+  void _stopCycle() {
+    _cycleActive = false;
+    _cycleTimer?.cancel();
+    _cycleTimer = null;
+  }
+
+  Future<void> _doCycleOn() async {
+    if (!_cycleActive || _userStopped) return;
+    final profile = state.ownProfile;
+    if (profile == null) return;
+    try {
+      final btState = await FlutterBluePlus.adapterState.first;
+      if (btState != BluetoothAdapterState.on) {
+        // BT がオフなら 30 秒後に再試行
+        _cycleTimer = Timer(const Duration(seconds: 30), _doCycleOn);
+        return;
+      }
+      await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload());
+      await _scanner.start();
+      debugPrint('[Cycle] BLE ON — 15秒スキャン開始');
+    } catch (e) {
+      debugPrint('[Cycle] ON error: $e');
+    }
+    // 15 秒後に OFF
+    _cycleTimer = Timer(const Duration(seconds: 15), _doCycleOff);
+  }
+
+  Future<void> _doCycleOff() async {
+    if (!_cycleActive) return;
+    try { await _scanner.stop(); } catch (e) {
+      debugPrint('[Cycle] scan stop error: $e');
+    }
+    try { await _advertiser.stopAdvertise(); } catch (e) {
+      debugPrint('[Cycle] advertise stop error: $e');
+    }
+    debugPrint('[Cycle] BLE OFF — 585秒スリープ');
+    // 585 秒後（= 10分 − 15秒）に再び ON
+    _cycleTimer = Timer(const Duration(seconds: 585), _doCycleOn);
+  }
+
   // ─── Stop ────────────────────────────────────────────────────────────────
 
   Future<void> stop() async {
-    _userStopped = true; // 手動停止 → BT 復帰後も自動起動しない
+    _userStopped = true;
     if (!state.isRunning) return;
+    _stopCycle(); // サイクルタイマーをキャンセル
     await _encounterSub?.cancel();
     await _departureSub?.cancel();
     _encounterSub = null;
     _departureSub = null;
-    // スキャン停止
     try { await _scanner.stop(); } catch (e) {
       debugPrint('[App] scanner stop error: $e');
     }
-    // アドバタイズ停止（送信シャットダウン）
     try { await _advertiser.stopAdvertise(); } catch (e) {
       debugPrint('[App] stopAdvertise error: $e');
     }
-    // フォアグラウンドサービス停止
     try { await _advertiser.stopForegroundService(); } catch (e) {
       debugPrint('[App] stopForegroundService error: $e');
     }
     state = state.copyWith(isRunning: false);
-    debugPrint('[App] fully stopped (scan + advertise)');
+    debugPrint('[App] fully stopped (cycle + scan + advertise)');
   }
 
   void clearNewEncounterFlag() {
@@ -300,7 +345,6 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> _onEncounter(EncounterEvent event) async {
     debugPrint('[Encounter] name=${event.name} id=${event.peerId.substring(28)}');
-    // ウォームアップ振動（生存シグナル）は v1.4.1 で削除 → 切断通知に移行
     await _upsertEncounter(
       peerId:     event.peerId,
       name:       event.name,
@@ -315,14 +359,13 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> _onDeparture(String peerId) async {
     final last = _notifScheduled[peerId];
     final now  = DateTime.now();
-    // 同じ人に対し12時間以内に重複スケジュールしない
     if (last != null && now.difference(last).inHours < 12) {
       debugPrint('[Departure] skip notif for ${peerId.substring(28)} (cooldown)');
       return;
     }
     _notifScheduled[peerId] = now;
 
-    final delayMin = _rng.nextInt(51) + 10; // 10〜60分
+    final delayMin = _rng.nextInt(51) + 10;
     final settings = await NotificationService.loadSettings();
     await NotificationService.scheduleEncounterNotification(
       peerId:       peerId,
@@ -345,11 +388,19 @@ class AppNotifier extends Notifier<AppState> {
 
     if (idx >= 0) {
       final existing = list.removeAt(idx);
-      list.insert(0, existing.updatedWith(
-        lastMet:  now,
-        rssi:     rssi,
-        name:     name,
-        template: template,
+      // 同日すれ違い済み → meetCount は変えずにメタ情報のみ更新（カウント爆増防止）
+      final newMeetCount =
+          existing.metToday ? existing.meetCount : existing.meetCount + 1;
+      list.insert(0, EncounterRecord(
+        peerId:     existing.peerId,
+        name:       name,
+        colorIndex: existing.colorIndex,
+        firstMet:   existing.firstMet,
+        lastMet:    now,
+        meetCount:  newMeetCount,
+        rssi:       rssi,
+        template:   template,
+        isRevealed: existing.isRevealed && existing.metToday,
       ));
     } else {
       list.insert(0, EncounterRecord(
@@ -371,6 +422,7 @@ class AppNotifier extends Notifier<AppState> {
 
   @override
   void dispose() {
+    _stopCycle();
     _btStateSub?.cancel();
     _encounterSub?.cancel();
     _departureSub?.cancel();

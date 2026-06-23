@@ -1,15 +1,17 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 
-class RadarAnimation extends StatefulWidget {
-  final double size;
-  const RadarAnimation({super.key, this.size = 220});
+// ミントグリーンのサイン波アニメーション（旧円形レーダー廃止・完全置き換え）
+class WaveAnimation extends StatefulWidget {
+  final double width;
+  final double height;
+  const WaveAnimation({super.key, this.width = 260, this.height = 56});
 
   @override
-  State<RadarAnimation> createState() => _RadarAnimationState();
+  State<WaveAnimation> createState() => _WaveAnimationState();
 }
 
-class _RadarAnimationState extends State<RadarAnimation>
+class _WaveAnimationState extends State<WaveAnimation>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
 
@@ -18,7 +20,7 @@ class _RadarAnimationState extends State<RadarAnimation>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(milliseconds: 2200),
     )..repeat();
   }
 
@@ -30,93 +32,65 @@ class _RadarAnimationState extends State<RadarAnimation>
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, __) => CustomPaint(
-        painter: _RadarPainter(_ctrl.value, color),
-        size: Size(widget.size, widget.size),
+        painter: _WavePainter(_ctrl.value),
+        size: Size(widget.width, widget.height),
       ),
     );
   }
 }
 
-class _RadarPainter extends CustomPainter {
+class _WavePainter extends CustomPainter {
   final double progress;
-  final Color color;
-  _RadarPainter(this.progress, this.color);
+  static const _mint = Color(0xFF4ECDC4);
+
+  const _WavePainter(this.progress);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxR   = size.width / 2;
+    final midY = size.height / 2;
+    final amp  = size.height * 0.36;
 
-    // 静的な薄いグリッドリング
-    final gridPaint = Paint()
-      ..color = color.withOpacity(0.08)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (final f in [0.33, 0.66, 1.0]) {
-      canvas.drawCircle(center, maxR * f, gridPaint);
+    // 背面の薄い波（位相ずらし）
+    _drawWave(
+      canvas, size, midY, amp * 0.60, 2.5, progress + 0.28,
+      Paint()
+        ..color = _mint.withOpacity(0.20)
+        ..strokeWidth = 1.4
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // メインの波（ミントグリーン）
+    _drawWave(
+      canvas, size, midY, amp, 2.0, progress,
+      Paint()
+        ..color = _mint
+        ..strokeWidth = 2.2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  void _drawWave(Canvas canvas, Size size, double midY, double amplitude,
+      double freq, double phase, Paint paint) {
+    final path = Path();
+    final w = size.width;
+    bool first = true;
+    for (double x = 0; x <= w; x += 1.5) {
+      final y = midY + amplitude * sin(2 * pi * (freq * (x / w) - phase));
+      if (first) {
+        path.moveTo(x, y);
+        first = false;
+      } else {
+        path.lineTo(x, y);
+      }
     }
-
-    // 十字線
-    canvas.drawLine(
-      Offset(center.dx, center.dy - maxR),
-      Offset(center.dx, center.dy + maxR),
-      gridPaint,
-    );
-    canvas.drawLine(
-      Offset(center.dx - maxR, center.dy),
-      Offset(center.dx + maxR, center.dy),
-      gridPaint,
-    );
-
-    // 回転スイープ
-    final sweepAngle = progress * 2 * pi;
-    final sweepPaint = Paint()
-      ..shader = SweepGradient(
-        startAngle: sweepAngle - 0.8,
-        endAngle: sweepAngle,
-        colors: [Colors.transparent, color.withOpacity(0.3)],
-        tileMode: TileMode.clamp,
-      ).createShader(Rect.fromCircle(center: center, radius: maxR))
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, maxR, sweepPaint);
-
-    // 走査線
-    final linePaint = Paint()
-      ..color = color.withOpacity(0.7)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(
-      center,
-      Offset(
-        center.dx + maxR * cos(sweepAngle),
-        center.dy + maxR * sin(sweepAngle),
-      ),
-      linePaint,
-    );
-
-    // 拡散リング（3本、位相ずれ）
-    for (int i = 0; i < 3; i++) {
-      final phase   = (progress + i / 3) % 1.0;
-      final radius  = phase * maxR;
-      final opacity = (1.0 - phase).clamp(0.0, 1.0) * 0.6;
-      canvas.drawCircle(
-        center,
-        radius,
-        Paint()
-          ..color = color.withOpacity(opacity)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5,
-      );
-    }
-
-    // 中心ドット
-    canvas.drawCircle(center, 5, Paint()..color = color);
+    canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(_RadarPainter old) => old.progress != progress;
+  bool shouldRepaint(_WavePainter old) => old.progress != progress;
 }

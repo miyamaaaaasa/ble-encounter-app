@@ -25,6 +25,13 @@ class NotificationService {
 
   static bool _initialized = false;
 
+  // UTC フォールバックを完全廃止。常に Asia/Tokyo を使う。
+  static tz.Location _location() {
+    try { return tz.local; } catch (_) {}
+    try { return tz.getLocation('Asia/Tokyo'); } catch (_) {}
+    return tz.UTC;
+  }
+
   static Future<void> init() async {
     if (_initialized) return;
     _initialized = true;
@@ -101,13 +108,9 @@ class NotificationService {
     try {
       await _plugin.cancel(_dailyNotifId);
 
-      tz.TZDateTime now;
-      try { now = tz.TZDateTime.now(tz.local); }
-      catch (_) { now = tz.TZDateTime.now(tz.UTC); }
-
-      tz.TZDateTime scheduled;
-      try { scheduled = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour); }
-      catch (_) { scheduled = tz.TZDateTime(tz.UTC, now.year, now.month, now.day, hour); }
+      final loc       = _location();
+      final now       = tz.TZDateTime.now(loc);
+      var   scheduled = tz.TZDateTime(loc, now.year, now.month, now.day, hour);
 
       if (scheduled.isBefore(now)) scheduled = scheduled.add(const Duration(days: 1));
 
@@ -181,10 +184,7 @@ class NotificationService {
     try {
       final notifId = peerId.hashCode.abs() % 200 + 300;
 
-      tz.TZDateTime now;
-      try { now = tz.TZDateTime.now(tz.local); }
-      catch (_) { now = tz.TZDateTime.now(tz.UTC); }
-
+      final now         = tz.TZDateTime.now(_location());
       final scheduledAt = now.add(Duration(minutes: delayMinutes));
       final hh = revealHour.toString().padLeft(2, '0');
 

@@ -34,7 +34,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {
       info = PackageInfo(
           appName: 'はじめましてこんにちは', packageName: '',
-          version: '1.5.1', buildNumber: '8');
+          version: '1.5.3', buildNumber: '10');
     }
     if (!mounted) return;
     setState(() {

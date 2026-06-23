@@ -5,7 +5,7 @@ import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart';
 import '../services/notification_service.dart';
 import 'encounter_helpers.dart';
-import 'radar_widget.dart';
+import 'radar_widget.dart'; // WaveAnimation
 
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
@@ -69,6 +69,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   @override
   Widget build(BuildContext context) {
     final state       = ref.watch(appProvider);
+
+    // プロフィール初回設定後に通知時刻を再読込（セットアップ画面から戻ったとき用）
+    ref.listen<AppState>(appProvider, (prev, next) {
+      if ((prev?.ownProfile == null) && next.ownProfile != null) {
+        _init();
+      }
+    });
+
     final todayUnrev  = state.encounters.where((e) => e.metToday && !e.isRevealed).toList();
     final todayRev    = state.encounters.where((e) => e.metToday && e.isRevealed).toList();
     final alreadyDone = todayRev.isNotEmpty;
@@ -109,20 +117,27 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           ],
         ),
 
-        // ─── レーダー（常時表示）────────────────────────────────────────────
+        // ─── サイン波（間欠スキャン中を静かに表示）─────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(0, 28, 0, 8),
+            padding: const EdgeInsets.fromLTRB(0, 32, 0, 8),
             child: Column(
               children: [
-                const RadarAnimation(size: 180),
-                const SizedBox(height: 16),
+                AnimatedOpacity(
+                  opacity: state.isRunning ? 1.0 : 0.35,
+                  duration: const Duration(milliseconds: 600),
+                  child: const WaveAnimation(),
+                ),
+                const SizedBox(height: 14),
                 Text(
-                  'すれ違い通信稼働中…',
+                  state.isRunning ? '10分に1回 定期スキャン中' : '停止中',
                   style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: state.isRunning
+                        ? const Color(0xFF4ECDC4)
+                        : Theme.of(context).colorScheme.outlineVariant,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],

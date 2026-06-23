@@ -71,6 +71,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return;
     }
     final existing = ref.read(appProvider).ownProfile;
+    // 初回セットアップ時: 時刻を先に確定させる（saveOwnProfile が start() を
+    // 呼ぶ前に正しい hour が SharedPreferences に書き込まれている必要がある）
+    if (widget.isFirstLaunch && _initialHour != null) {
+      await NotificationService.setInitialHour(_initialHour!);
+    }
     await ref.read(appProvider.notifier).saveOwnProfile(
           OwnProfile(
             name: name,
@@ -79,10 +84,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             registeredAt: existing?.registeredAt,
           ),
         );
-    // 初回セットアップ時のみ: 7日ロックを発動させずに時刻を設定
-    if (widget.isFirstLaunch && _initialHour != null) {
-      await NotificationService.setInitialHour(_initialHour!);
-    }
     if (!widget.isFirstLaunch && context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('保存しました')));
