@@ -75,6 +75,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // 呼ぶ前に正しい hour が SharedPreferences に書き込まれている必要がある）
     if (widget.isFirstLaunch && _initialHour != null) {
       await NotificationService.setInitialHour(_initialHour!);
+      ref.read(notifHourProvider.notifier).state = _initialHour!; // 今日タブへ即時反映
     }
     await ref.read(appProvider.notifier).saveOwnProfile(
           OwnProfile(
