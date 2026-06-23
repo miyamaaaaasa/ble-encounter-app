@@ -10,6 +10,8 @@ class EncounterRecord {
   final int meetCount;
   final int rssi;
   final TemplateMessage template;
+  // プライバシー保護: 結果演出完了まで画面に表示しない
+  final bool isRevealed;
 
   const EncounterRecord({
     required this.peerId,
@@ -20,6 +22,7 @@ class EncounterRecord {
     required this.meetCount,
     required this.rssi,
     this.template = const TemplateMessage(),
+    this.isRevealed = false,
   });
 
   bool get metToday {
@@ -51,6 +54,20 @@ class EncounterRecord {
         meetCount: meetCount + 1,
         rssi: rssi,
         template: template ?? this.template,
+        isRevealed: false, // 再遭遇は再度 unrevealed
+      );
+
+  // 結果演出完了時に呼ぶ
+  EncounterRecord reveal() => EncounterRecord(
+        peerId: peerId,
+        name: name,
+        colorIndex: colorIndex,
+        firstMet: firstMet,
+        lastMet: lastMet,
+        meetCount: meetCount,
+        rssi: rssi,
+        template: template,
+        isRevealed: true,
       );
 
   Map<String, dynamic> toMap() => {
@@ -65,6 +82,7 @@ class EncounterRecord {
         'th': template.hobbyCategory,
         'td': template.hobbyDetail,
         'tp': template.phraseIndex,
+        'rv': isRevealed,
       };
 
   static EncounterRecord fromMap(Map<String, dynamic> m) => EncounterRecord(
@@ -81,6 +99,7 @@ class EncounterRecord {
           hobbyDetail: m['td'] as int? ?? 0,
           phraseIndex: m['tp'] as int? ?? 0,
         ),
+        isRevealed: m['rv'] as bool? ?? true, // 旧レコードは公開済み扱い
       );
 
   static String encodeList(List<EncounterRecord> list) =>

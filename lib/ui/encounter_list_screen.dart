@@ -33,7 +33,9 @@ class _EncounterListScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appProvider);
-    final encounters = _sorted(state.encounters);
+    // 図鑑は開封済みのみ表示（プライバシー保護）
+    final encounters = _sorted(
+        state.encounters.where((e) => e.isRevealed).toList());
 
     return CustomScrollView(
       slivers: [
@@ -44,7 +46,7 @@ class _EncounterListScreenState
               padding: const EdgeInsets.only(right: 16),
               child: Chip(
                 avatar: const Icon(Icons.people, size: 16),
-                label: Text('累計 ${state.encounters.length} 人'),
+                label: Text('累計 ${encounters.length} 人'),
               ),
             ),
           ],

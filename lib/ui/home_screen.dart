@@ -98,12 +98,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           setState(() => _selectedIndex = i);
         },
         destinations: [
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: state.hasNewEncounter && _selectedIndex != 0,
-              child: const Icon(Icons.today_outlined),
-            ),
-            selectedIcon: const Icon(Icons.today),
+          const NavigationDestination(
+            icon: Icon(Icons.today_outlined),
+            selectedIcon: Icon(Icons.today),
             label: '今日',
           ),
           const NavigationDestination(

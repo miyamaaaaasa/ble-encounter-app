@@ -189,7 +189,6 @@ class AppNotifier extends Notifier<AppState> {
       if (notifSettings.dailyEnabled) {
         await NotificationService.scheduleDailyNotification(
           hour: notifSettings.hour,
-          minute: notifSettings.minute,
         );
       }
     } catch (e) {
@@ -214,6 +213,16 @@ class AppNotifier extends Notifier<AppState> {
 
   void clearNewEncounterFlag() {
     state = state.copyWith(hasNewEncounter: false);
+  }
+
+  // 結果演出完了時: 本日の unrevealed を一斉に解放
+  Future<void> revealToday() async {
+    final list = state.encounters.map((e) {
+      if (e.metToday && !e.isRevealed) return e.reveal();
+      return e;
+    }).toList();
+    state = state.copyWith(encounters: list, hasNewEncounter: false);
+    await _storage.saveEncounters(list);
   }
 
   // ─── Encounter ───────────────────────────────────────────────────────────

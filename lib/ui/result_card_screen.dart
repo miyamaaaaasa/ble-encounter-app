@@ -5,7 +5,12 @@ import 'encounter_detail_sheet.dart';
 
 class ResultCardScreen extends StatefulWidget {
   final List<EncounterRecord> encounters;
-  const ResultCardScreen({super.key, required this.encounters});
+  final VoidCallback? onReveal; // リザルト画面到達時に呼ばれる
+  const ResultCardScreen({
+    super.key,
+    required this.encounters,
+    this.onReveal,
+  });
 
   @override
   State<ResultCardScreen> createState() => _ResultCardScreenState();
@@ -13,15 +18,25 @@ class ResultCardScreen extends StatefulWidget {
 
 class _ResultCardScreenState extends State<ResultCardScreen> {
   int _index = 0;
+  bool _revealed = false;
 
   bool get _isDone => _index >= widget.encounters.length;
 
   void _next() => setState(() => _index++);
+
   void _skipAll() => setState(() => _index = widget.encounters.length);
+
+  void _doReveal() {
+    if (!_revealed) {
+      _revealed = true;
+      widget.onReveal?.call();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     if (widget.encounters.isEmpty || _isDone) {
+      _doReveal();
       return _ResultScreen(total: widget.encounters.length);
     }
 
@@ -30,7 +45,9 @@ class _ResultCardScreenState extends State<ResultCardScreen> {
       current: _index + 1,
       total: widget.encounters.length,
       onNext: _next,
-      onSkip: _skipAll,
+      onSkip: () {
+        _skipAll();
+      },
     );
   }
 }
@@ -54,16 +71,15 @@ class _EncounterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = avatarColors[encounter.colorIndex % avatarColors.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-    final label = encounterLabel(encounter.meetCount);
+    final color   = avatarColors[encounter.colorIndex % avatarColors.length];
+    final initial = encounter.name.isNotEmpty
+        ? encounter.name.characters.first : '?';
+    final label      = encounterLabel(encounter.meetCount);
     final labelColor = encounterLabelColor(encounter.meetCount, context);
-    final tmpl = encounter.template;
+    final tmpl       = encounter.template;
 
     return Scaffold(
-      backgroundColor:
-          Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
@@ -72,8 +88,7 @@ class _EncounterCard extends StatelessWidget {
         ),
         title: Text('$current / $total',
             style: TextStyle(
-                color: Theme.of(context).colorScheme.outline,
-                fontSize: 14)),
+                color: Theme.of(context).colorScheme.outline, fontSize: 14)),
         actions: [
           TextButton(
             onPressed: onSkip,
@@ -88,30 +103,24 @@ class _EncounterCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
           child: Column(
             children: [
-              // プログレスバー
               LinearProgressIndicator(
                 value: current / total,
                 borderRadius: BorderRadius.circular(4),
               ),
               const Spacer(),
-              // アバター
               CircleAvatar(
                 radius: 68,
                 backgroundColor: color,
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                      fontSize: 56,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold),
-                ),
+                child: Text(initial,
+                    style: const TextStyle(
+                        fontSize: 56,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 20),
-              Text(
-                encounter.name,
-                style: const TextStyle(
-                    fontSize: 30, fontWeight: FontWeight.w800),
-              ),
+              Text(encounter.name,
+                  style: const TextStyle(
+                      fontSize: 30, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -121,30 +130,27 @@ class _EncounterCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: labelColor.withOpacity(0.5)),
                 ),
-                child: Text(
-                  '【$label】',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: labelColor,
-                      fontSize: 15),
-                ),
+                child: Text('【$label】',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: labelColor,
+                        fontSize: 15)),
               ),
               const SizedBox(height: 20),
-              // メッセージカード
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Column(
                   children: [
-                    Text(
-                      '💬  ${tmpl.statusText}',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
+                    Text('💬  ${tmpl.statusText}',
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     Text(
                       '${tmpl.hobbyCategoryText} の ${tmpl.hobbyDetailText}',
@@ -155,18 +161,14 @@ class _EncounterCard extends StatelessWidget {
                               .onSurfaceVariant),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      tmpl.phraseText,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color:
-                              Theme.of(context).colorScheme.outline),
-                    ),
+                    Text(tmpl.phraseText,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.outline)),
                   ],
                 ),
               ),
               const Spacer(),
-              // ボタン
               Row(
                 children: [
                   OutlinedButton(
@@ -182,8 +184,7 @@ class _EncounterCard extends StatelessWidget {
                       onPressed: onNext,
                       style: FilledButton.styleFrom(
                           minimumSize: const Size(0, 48)),
-                      child: Text(
-                          current < total ? '次の人 →' : '結果を見る'),
+                      child: Text(current < total ? '次の人 →' : '結果を見る'),
                     ),
                   ),
                 ],
@@ -212,12 +213,10 @@ class _ResultScreen extends StatelessWidget {
             children: [
               const Text('🎉', style: TextStyle(fontSize: 72)),
               const SizedBox(height: 24),
-              Text(
-                '今日は',
-                style: TextStyle(
-                    fontSize: 18,
-                    color: Theme.of(context).colorScheme.outline),
-              ),
+              Text('今日は',
+                  style: TextStyle(
+                      fontSize: 18,
+                      color: Theme.of(context).colorScheme.outline)),
               const SizedBox(height: 4),
               RichText(
                 text: TextSpan(
@@ -241,11 +240,9 @@ class _ResultScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'とすれ違いました！',
-                style: TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w600),
-              ),
+              const Text('とすれ違いました！',
+                  style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w600)),
               const SizedBox(height: 48),
               FilledButton.icon(
                 onPressed: () => Navigator.pop(context),
