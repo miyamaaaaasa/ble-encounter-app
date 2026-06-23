@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/ble_config.dart';
 import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart';
 import '../services/notification_service.dart';
@@ -54,6 +55,13 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 
   bool _isRevealBatch(EncounterRecord e) {
+    if (kGateAlwaysOpen) {
+      // デバッグ: 今日の出会いを全て表示対象に
+      final now = DateTime.now();
+      return e.lastMet.year == now.year &&
+             e.lastMet.month == now.month &&
+             e.lastMet.day == now.day;
+    }
     final d = _revealDate;
     return e.lastMet.year == d.year &&
            e.lastMet.month == d.month &&
@@ -61,6 +69,17 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 
   void _updateGate() {
+    if (kGateAlwaysOpen) {
+      // デバッグ: ゲート常時開放
+      setState(() {
+        _gateOpen          = true;
+        _remaining         = Duration.zero;
+        _tomorrowRemaining = Duration.zero;
+      });
+      _countdownTimer?.cancel();
+      return;
+    }
+
     final now = DateTime.now();
 
     if (_notifHour == 0) {
@@ -164,7 +183,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  state.isRunning ? '10分に1回 定期スキャン中' : '停止中',
+                  state.isRunning ? '約2分に1回 定期スキャン中' : '停止中',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,

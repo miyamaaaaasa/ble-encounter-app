@@ -151,7 +151,7 @@ class BleScanner {
       colorIndex = payload[20] & 0xFF;
       final dataBytes = payload.length > 21 ? payload.sublist(21) : <int>[];
       (name, template) = _parseProfileBytes(dataBytes);
-      debugPrint('[BleScanner] FULL mac=$mac id=${peerId.substring(28)} name=$name');
+      debugPrint('[BleScanner] FULL id=${peerId.substring(28)} name=$name rssi=${result.rssi}dBm');
     } else if (payload.length >= 20 && payload[17] == _magicProfile) {
       colorIndex = payload[18] & 0xFF;
       final dataBytes = payload.length > 19 ? payload.sublist(19) : <int>[];
@@ -200,7 +200,7 @@ class BleScanner {
     // 同一スキャンセッション内で同一ピアへの重複 emit を防ぐ（爆増バグ対策）
     if (_emittedPeers.contains(peerId)) return;
     _emittedPeers.add(peerId);
-    debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name');
+    debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name rssi=${rssi}dBm');
     _encounterCtrl.add(EncounterEvent(
       time: DateTime.now(),
       peerId: peerId,

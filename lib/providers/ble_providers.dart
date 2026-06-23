@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../core/ble_config.dart';
 import '../core/peer_id.dart';
 import '../models/app_badge.dart';
 import '../models/own_profile.dart';
@@ -72,8 +73,10 @@ class AppNotifier extends Notifier<AppState> {
   final _notifScheduled = <String, DateTime>{};
   bool _userStopped = false;
 
-  // 間欠スキャンサイクル制御（15秒ON / 585秒OFF）
-  bool   _cycleActive = false;
+  // 間欠スキャンサイクル制御（実機最適化: 15秒ON / 105秒OFF）
+  bool   _cycleActive    = false;
+  bool   _cycleOnActive  = false; // _doCycleOn並列実行防止フラグ
+  bool   _starting       = false; // start() 二重呼び出し防止フラグ
   Timer? _cycleTimer;
 
   StreamSubscription<EncounterEvent>?        _encounterSub;
@@ -208,7 +211,9 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> start() async {
     _userStopped = false;
-    if (state.isRunning) return;
+    // async 中に BT状態イベントが割り込む競合を防ぐ二重起動ガード
+    if (state.isRunning || _starting) return;
+    _starting = true;
     final profile = state.ownProfile;
     if (profile == null) {
       state = state.copyWith(errorMessage: 'プロフィールを設定してください');
@@ -230,9 +235,10 @@ class AppNotifier extends Notifier<AppState> {
 
       await _advertiser.startForegroundService();
       state = state.copyWith(isRunning: true, errorMessage: null);
+      _starting = false; // isRunning=true になったのでロック解放
       debugPrint('[App] cycle started peerId=${PeerId.hex}');
 
-      _startCycle(); // 間欠駆動開始（15秒ON / 585秒OFF）
+      _startCycle(); // 間欠駆動開始（最適化済みインターバル）
 
       final notifSettings = await NotificationService.loadSettings();
       if (notifSettings.dailyEnabled) {
@@ -243,6 +249,8 @@ class AppNotifier extends Notifier<AppState> {
     } catch (e) {
       debugPrint('[App] start error: $e');
       state = state.copyWith(isRunning: false, errorMessage: '起動エラー: $e');
+    } finally {
+      _starting = false;
     }
   }
 
@@ -262,9 +270,16 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> _doCycleOn() async {
     if (!_cycleActive || _userStopped) return;
-    final profile = state.ownProfile;
-    if (profile == null) return;
+    // 並列実行防止: 前回の _doCycleOn がまだ async 処理中なら skip
+    if (_cycleOnActive) {
+      debugPrint('[Cycle] _doCycleOn skip (already running)');
+      return;
+    }
+    _cycleOnActive = true;
     try {
+      final profile = state.ownProfile;
+      if (profile == null) return;
+
       final btState = await FlutterBluePlus.adapterState.first;
       if (btState != BluetoothAdapterState.on) {
         // BT がオフなら 30 秒後に再試行
@@ -273,12 +288,13 @@ class AppNotifier extends Notifier<AppState> {
       }
       await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload());
       await _scanner.start();
-      debugPrint('[Cycle] BLE ON — 15秒スキャン開始');
+      debugPrint('[Cycle] BLE ON — ${kScanOnSeconds}s (debug=$kDebugBle)');
     } catch (e) {
       debugPrint('[Cycle] ON error: $e');
+    } finally {
+      _cycleOnActive = false;
     }
-    // 15 秒後に OFF
-    _cycleTimer = Timer(const Duration(seconds: 15), _doCycleOff);
+    _cycleTimer = Timer(Duration(seconds: kScanOnSeconds), _doCycleOff);
   }
 
   Future<void> _doCycleOff() async {
@@ -289,9 +305,8 @@ class AppNotifier extends Notifier<AppState> {
     try { await _advertiser.stopAdvertise(); } catch (e) {
       debugPrint('[Cycle] advertise stop error: $e');
     }
-    debugPrint('[Cycle] BLE OFF — 585秒スリープ');
-    // 585 秒後（= 10分 − 15秒）に再び ON
-    _cycleTimer = Timer(const Duration(seconds: 585), _doCycleOn);
+    debugPrint('[Cycle] BLE OFF — ${kScanOffSeconds}s スリープ (debug=$kDebugBle)');
+    _cycleTimer = Timer(Duration(seconds: kScanOffSeconds), _doCycleOn);
   }
 
   // ─── Stop ────────────────────────────────────────────────────────────────
