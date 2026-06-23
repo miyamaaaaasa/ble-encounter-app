@@ -31,6 +31,9 @@
     <!-- ─── バッテリー最適化除外リクエスト ─── -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- ─── 生存シグナル振動 ─── -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- ─── 写真アクセス (Android 13+) ─── -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <!-- 旧 Android 向け -->

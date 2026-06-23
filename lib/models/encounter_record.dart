@@ -54,7 +54,8 @@ class EncounterRecord {
         meetCount: meetCount + 1,
         rssi: rssi,
         template: template ?? this.template,
-        isRevealed: false, // 再遭遇は再度 unrevealed
+        // 今日すでに開封済みなら保持。昨日以前の revealed は今日の再遭遇でリセット
+        isRevealed: isRevealed && metToday,
       );
 
   // 結果演出完了時に呼ぶ

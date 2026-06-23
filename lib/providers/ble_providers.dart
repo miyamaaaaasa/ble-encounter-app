@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/services.dart';
 import '../core/peer_id.dart';
 import '../models/own_profile.dart';
 import '../models/encounter_record.dart';
@@ -56,7 +58,9 @@ class AppNotifier extends Notifier<AppState> {
   final _scanner    = BleScanner();
   final _storage    = ProfileStorage();
 
-  final _cooldown = <String, DateTime>{};
+  final _cooldown    = <String, DateTime>{};
+  final _rng         = Random();
+  final _vibTimers   = <Timer>[];
 
   StreamSubscription<EncounterEvent>?       _encounterSub;
   StreamSubscription<BluetoothAdapterState>? _btStateSub;
@@ -238,6 +242,9 @@ class AppNotifier extends Notifier<AppState> {
     }
     _cooldown[peerId] = DateTime.now();
 
+    // 生存シグナル: 5〜10分のランダム遅延後に短く振動（個人特定防止）
+    _scheduleVibration();
+
     await _upsertEncounter(
       peerId: peerId,
       name: event.name,
@@ -290,8 +297,33 @@ class AppNotifier extends Notifier<AppState> {
     await _storage.saveEncounters(trimmed);
   }
 
+  // ─── 生存シグナル振動（5〜10分ランダム遅延） ─────────────────────────────
+
+  void _scheduleVibration() {
+    final delaySec = _rng.nextInt(300) + 300; // 300〜600 秒 = 5〜10 分
+    final t = Timer(Duration(seconds: delaySec), _doVibrate);
+    _vibTimers.add(t);
+    debugPrint('[Vibration] scheduled in ${delaySec}s');
+  }
+
+  Future<void> _doVibrate() async {
+    try {
+      final settings = await NotificationService.loadSettings();
+      if (!settings.vibrationEnabled) return;
+      // 「トトッ」= 2連続 mediumImpact（フォアグラウンドサービス稼働中はBGでも動作）
+      await HapticFeedback.mediumImpact();
+      await Future.delayed(const Duration(milliseconds: 150));
+      await HapticFeedback.mediumImpact();
+      debugPrint('[Vibration] fired');
+    } catch (e) {
+      debugPrint('[Vibration] error: $e');
+    }
+  }
+
   @override
   void dispose() {
+    for (final t in _vibTimers) t.cancel();
+    _vibTimers.clear();
     _btStateSub?.cancel();
     _encounterSub?.cancel();
     _scanner.dispose();
