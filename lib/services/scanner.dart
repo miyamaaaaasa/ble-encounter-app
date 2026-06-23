@@ -30,22 +30,31 @@ class EncounterEvent {
 // ─── スキャナー ───────────────────────────────────────────────────────────────
 
 class BleScanner {
-  static const _mfId = 0xFFFF;
+  static const _mfId         = 0xFFFF;
   static const _magicPeer    = 0xBE;
   static const _magicProfile = 0xBF;
+  static const _departureThresholdSecs = 60; // 60秒見えなくなったら切断とみなす
 
-  final _controller = StreamController<EncounterEvent>.broadcast();
+  final _encounterCtrl  = StreamController<EncounterEvent>.broadcast();
+  final _departureCtrl  = StreamController<String>.broadcast();
+
   StreamSubscription<List<ScanResult>>? _scanSub;
+  Timer? _departureTimer;
+  bool   _stopped = false;
 
-  final _emittedPeers = <String>{};
+  // peerId → 最後に見えた時刻（アクティブ中のみ追跡）
+  final _activePeers  = <String, DateTime>{};
+  // macAddress → partial data（profile 未受信分）
   final _partialPeers = <String, _PartialData>{};
 
-  Stream<EncounterEvent> get encounters => _controller.stream;
+  Stream<EncounterEvent> get encounters => _encounterCtrl.stream;
+  Stream<String>         get departures => _departureCtrl.stream;
 
   final String _myPeerIdHex = PeerId.hex;
 
   Future<void> start() async {
-    _emittedPeers.clear();
+    _stopped = false;
+    _activePeers.clear();
     _partialPeers.clear();
 
     final adapterState = await FlutterBluePlus.adapterState.first;
@@ -67,27 +76,52 @@ class BleScanner {
       },
       onError: (e) => debugPrint('[BleScanner] error: $e'),
     );
+
+    // 15秒ごとに切断チェック
+    _departureTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _checkDepartures();
+    });
   }
 
   Future<void> stop() async {
+    _stopped = true;
+    _departureTimer?.cancel();
+    _departureTimer = null;
     await _scanSub?.cancel();
     _scanSub = null;
     if (FlutterBluePlus.isScanningNow) await FlutterBluePlus.stopScan();
-    _emittedPeers.clear();
+    _activePeers.clear();
     _partialPeers.clear();
   }
 
   void dispose() {
+    _stopped = true;
+    _departureTimer?.cancel();
     _scanSub?.cancel();
-    _controller.close();
+    _encounterCtrl.close();
+    _departureCtrl.close();
+  }
+
+  void _checkDepartures() {
+    if (_stopped) return;
+    final now       = DateTime.now();
+    final departed  = <String>[];
+    for (final entry in _activePeers.entries) {
+      if (now.difference(entry.value).inSeconds >= _departureThresholdSecs) {
+        departed.add(entry.key);
+      }
+    }
+    for (final peerId in departed) {
+      _activePeers.remove(peerId);
+      debugPrint('[BleScanner] DEPARTED id=${peerId.substring(28)}');
+      _departureCtrl.add(peerId);
+    }
   }
 
   void _processResult(ScanResult result) {
-    final mac = result.device.remoteId.str;
+    final mac    = result.device.remoteId.str;
     final mfData = result.advertisementData.manufacturerData;
 
-    // flutter_blue_plus は scan response を primary ad の同じ manufacturer ID に結合して届ける。
-    // フォーマット: [0xBE][peerId 16B][0xFF][0xFE][0xBF][color][name...][0x00][ts][th][td][tp]
     final payload = mfData[_mfId];
     if (payload == null || payload.length < 17 || payload[0] != _magicPeer) return;
 
@@ -97,6 +131,9 @@ class BleScanner {
         .map((b) => b.toRadixString(16).padLeft(2, '0'))
         .join();
     if (peerId == _myPeerIdHex) return;
+
+    // アクティブタイムスタンプを更新（すでに検知済みでも更新する）
+    _activePeers[peerId] = DateTime.now();
 
     String? name;
     int colorIndex = 0;
@@ -108,65 +145,55 @@ class BleScanner {
         payload[19] == _magicProfile) {
       colorIndex = payload[20] & 0xFF;
       final dataBytes = payload.length > 21 ? payload.sublist(21) : <int>[];
-      final sepIdx = dataBytes.indexOf(0x00);
-      if (sepIdx >= 0) {
-        name = sepIdx > 0
-            ? utf8.decode(dataBytes.sublist(0, sepIdx), allowMalformed: true).trim()
-            : '';
-        // 0x00 の後ろ 4 バイトが定型文インデックス
-        if (dataBytes.length >= sepIdx + 5) {
-          template = TemplateMessage(
-            statusIndex:   dataBytes[sepIdx + 1] & 0xFF,
-            hobbyCategory: dataBytes[sepIdx + 2] & 0xFF,
-            hobbyDetail:   dataBytes[sepIdx + 3] & 0xFF,
-            phraseIndex:   dataBytes[sepIdx + 4] & 0xFF,
-          );
-        }
-      } else {
-        name = dataBytes.isNotEmpty
-            ? utf8.decode(dataBytes, allowMalformed: true).trim()
-            : '';
-      }
+      (name, template) = _parseProfileBytes(dataBytes);
       debugPrint('[BleScanner] FULL mac=$mac id=${peerId.substring(28)} name=$name');
     } else if (payload.length >= 20 && payload[17] == _magicProfile) {
       colorIndex = payload[18] & 0xFF;
       final dataBytes = payload.length > 19 ? payload.sublist(19) : <int>[];
-      final sepIdx = dataBytes.indexOf(0x00);
-      if (sepIdx >= 0) {
-        name = sepIdx > 0
-            ? utf8.decode(dataBytes.sublist(0, sepIdx), allowMalformed: true).trim()
-            : '';
-        if (dataBytes.length >= sepIdx + 5) {
-          template = TemplateMessage(
-            statusIndex:   dataBytes[sepIdx + 1] & 0xFF,
-            hobbyCategory: dataBytes[sepIdx + 2] & 0xFF,
-            hobbyDetail:   dataBytes[sepIdx + 3] & 0xFF,
-            phraseIndex:   dataBytes[sepIdx + 4] & 0xFF,
-          );
-        }
-      } else {
-        name = dataBytes.isNotEmpty
-            ? utf8.decode(dataBytes, allowMalformed: true).trim()
-            : '';
-      }
+      (name, template) = _parseProfileBytes(dataBytes);
       debugPrint('[BleScanner] FULL2 mac=$mac id=${peerId.substring(28)} name=$name');
     } else {
       _partialPeers[mac] = _PartialData(peerId: peerId, rssi: result.rssi);
       return;
     }
 
-    final partial = _partialPeers[mac];
-    final finalRssi = partial?.rssi ?? result.rssi;
+    final partial    = _partialPeers[mac];
+    final finalRssi  = partial?.rssi ?? result.rssi;
     _tryEmit(peerId, mac, name ?? '', colorIndex, template, finalRssi);
   }
 
+  (String?, TemplateMessage) _parseProfileBytes(List<int> dataBytes) {
+    final sepIdx = dataBytes.indexOf(0x00);
+    String? name;
+    TemplateMessage template = const TemplateMessage();
+    if (sepIdx >= 0) {
+      name = sepIdx > 0
+          ? utf8.decode(dataBytes.sublist(0, sepIdx), allowMalformed: true).trim()
+          : '';
+      if (dataBytes.length >= sepIdx + 5) {
+        template = TemplateMessage(
+          statusIndex:   _decodeByte(dataBytes[sepIdx + 1]),
+          hobbyCategory: _decodeByte(dataBytes[sepIdx + 2]),
+          hobbyDetail:   _decodeByte(dataBytes[sepIdx + 3]),
+          phraseIndex:   _decodeByte(dataBytes[sepIdx + 4]),
+        );
+      }
+    } else {
+      name = dataBytes.isNotEmpty
+          ? utf8.decode(dataBytes, allowMalformed: true).trim()
+          : '';
+    }
+    return (name, template);
+  }
+
+  // 0xFF = 未回答（kNotSet = -1）
+  static int _decodeByte(int b) => b == 0xFF ? -1 : b & 0xFF;
+
   void _tryEmit(String peerId, String mac, String name,
       int colorIndex, TemplateMessage template, int rssi) {
-    if (_emittedPeers.contains(peerId)) return;
     if (name.isEmpty) return;
-    _emittedPeers.add(peerId);
     debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name');
-    _controller.add(EncounterEvent(
+    _encounterCtrl.add(EncounterEvent(
       time: DateTime.now(),
       peerId: peerId,
       macAddress: mac,

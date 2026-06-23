@@ -1,15 +1,17 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter/services.dart';
 import '../core/peer_id.dart';
+import '../models/app_badge.dart';
 import '../models/own_profile.dart';
 import '../models/encounter_record.dart';
 import '../models/template_message.dart';
 import '../services/advertiser.dart';
+import '../services/badge_service.dart';
 import '../services/scanner.dart';
 import '../services/profile_storage.dart';
 import '../services/notification_service.dart';
@@ -21,7 +23,9 @@ class AppState {
   final bool isRunning;
   final OwnProfile? ownProfile;
   final List<EncounterRecord> encounters;
+  final List<AppBadge> badges;
   final bool hasNewEncounter;
+  final List<AppBadge> newlyEarnedBadges; // 通知表示用
   final String? errorMessage;
 
   const AppState({
@@ -29,7 +33,9 @@ class AppState {
     this.isRunning = false,
     this.ownProfile,
     this.encounters = const [],
+    this.badges = const [],
     this.hasNewEncounter = false,
+    this.newlyEarnedBadges = const [],
     this.errorMessage,
   });
 
@@ -38,16 +44,20 @@ class AppState {
     bool? isRunning,
     OwnProfile? ownProfile,
     List<EncounterRecord>? encounters,
+    List<AppBadge>? badges,
     bool? hasNewEncounter,
+    List<AppBadge>? newlyEarnedBadges,
     String? errorMessage,
   }) =>
       AppState(
-        isLoading: isLoading ?? this.isLoading,
-        isRunning: isRunning ?? this.isRunning,
-        ownProfile: ownProfile ?? this.ownProfile,
-        encounters: encounters ?? this.encounters,
-        hasNewEncounter: hasNewEncounter ?? this.hasNewEncounter,
-        errorMessage: errorMessage,
+        isLoading:         isLoading ?? this.isLoading,
+        isRunning:         isRunning ?? this.isRunning,
+        ownProfile:        ownProfile ?? this.ownProfile,
+        encounters:        encounters ?? this.encounters,
+        badges:            badges ?? this.badges,
+        hasNewEncounter:   hasNewEncounter ?? this.hasNewEncounter,
+        newlyEarnedBadges: newlyEarnedBadges ?? this.newlyEarnedBadges,
+        errorMessage:      errorMessage,
       );
 }
 
@@ -57,54 +67,71 @@ class AppNotifier extends Notifier<AppState> {
   final _advertiser = BleAdvertiser();
   final _scanner    = BleScanner();
   final _storage    = ProfileStorage();
+  final _rng        = Random();
 
-  final _cooldown    = <String, DateTime>{};
-  final _rng         = Random();
-  final _vibTimers   = <Timer>[];
+  // peerId → 最後に notification を schedule した時刻（1日1回制限）
+  final _notifScheduled = <String, DateTime>{};
 
-  StreamSubscription<EncounterEvent>?       _encounterSub;
+  StreamSubscription<EncounterEvent>?        _encounterSub;
+  StreamSubscription<String>?                _departureSub;
   StreamSubscription<BluetoothAdapterState>? _btStateSub;
 
   @override
   AppState build() {
     _loadData();
-    // Bluetooth ON/OFF に連動して自動起動・停止する
     _btStateSub = FlutterBluePlus.adapterState.listen(_onBluetoothState);
     return const AppState();
   }
 
-  // Bluetooth アダプター状態の変化を処理
   Future<void> _onBluetoothState(BluetoothAdapterState btState) async {
     debugPrint('[App] BT state: $btState');
     if (btState == BluetoothAdapterState.on) {
-      // ロード完了済み & プロフィールあり & 未起動 のとき自動起動
       if (!state.isLoading && state.ownProfile != null && !state.isRunning) {
         await start();
       }
     } else if (btState == BluetoothAdapterState.off ||
                btState == BluetoothAdapterState.turningOff) {
       if (state.isRunning) {
-        // BT が切れた — スキャンを停止してUIを更新（advertiser は OS が自動停止）
         await _encounterSub?.cancel();
         _encounterSub = null;
+        await _departureSub?.cancel();
+        _departureSub = null;
         try { await _scanner.stop(); } catch (_) {}
         state = state.copyWith(isRunning: false, errorMessage: null);
-        debugPrint('[App] BT off — stopped');
       }
     }
   }
 
   Future<void> _loadData() async {
-    final profile    = await _storage.loadOwnProfile();
-    final encounters = await _storage.loadEncounters();
+    final profile  = await _storage.loadOwnProfile();
+    var encounters = await _storage.loadEncounters();
+    final badges   = await BadgeService.load();
+
+    // 翌日自動救済: 今日より前の未開封エンカウントを自動解放
+    final todayStart = DateTime.now();
+    final hasOldUnrevealed = encounters.any(
+      (e) => !e.isRevealed && (
+        e.lastMet.year < todayStart.year ||
+        e.lastMet.month < todayStart.month ||
+        e.lastMet.day < todayStart.day
+      ),
+    );
+    if (hasOldUnrevealed) {
+      encounters = encounters.map((e) {
+        if (!e.isRevealed && !e.metToday) return e.reveal();
+        return e;
+      }).toList();
+      await _storage.saveEncounters(encounters);
+      debugPrint('[App] auto-rescued past unrevealed encounters');
+    }
+
     state = state.copyWith(
-      isLoading: false,
+      isLoading:  false,
       ownProfile: profile,
       encounters: encounters,
+      badges:     badges,
     );
-    if (profile != null) {
-      await _autoStart();
-    }
+    if (profile != null) await _autoStart();
   }
 
   Future<void> _autoStart() async {
@@ -116,14 +143,11 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> saveOwnProfile(OwnProfile profile) async {
     final isFirstSave = state.ownProfile == null;
-
     final withDate = profile.registeredAt != null
         ? profile
         : profile.copyWith(registeredAt: DateTime.now());
-
     await _storage.saveOwnProfile(withDate);
     state = state.copyWith(ownProfile: withDate, errorMessage: null);
-
     if (state.isRunning) {
       try {
         await _advertiser.stopAdvertise();
@@ -168,8 +192,6 @@ class AppNotifier extends Notifier<AppState> {
       state = state.copyWith(errorMessage: 'プロフィールを設定してください');
       return;
     }
-
-    // BT が無効なら黙って返る（adapterState リスナーが ON になったとき再度呼ぶ）
     try {
       final btState = await FlutterBluePlus.adapterState.first;
       if (btState != BluetoothAdapterState.on) {
@@ -179,9 +201,10 @@ class AppNotifier extends Notifier<AppState> {
     } catch (_) {}
 
     try {
-      // 既存のサブスクリプションをクリーンアップしてから再登録
       await _encounterSub?.cancel();
+      await _departureSub?.cancel();
       _encounterSub = _scanner.encounters.listen(_onEncounter);
+      _departureSub = _scanner.departures.listen(_onDeparture);
 
       await _advertiser.startForegroundService();
       await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload());
@@ -206,7 +229,9 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> stop() async {
     if (!state.isRunning) return;
     await _encounterSub?.cancel();
+    await _departureSub?.cancel();
     _encounterSub = null;
+    _departureSub = null;
     await _scanner.stop();
     try {
       await _advertiser.stopAdvertise();
@@ -219,41 +244,69 @@ class AppNotifier extends Notifier<AppState> {
     state = state.copyWith(hasNewEncounter: false);
   }
 
-  // 結果演出完了時: 本日の unrevealed を一斉に解放
+  void clearNewBadges() {
+    state = state.copyWith(newlyEarnedBadges: []);
+  }
+
+  // 結果演出完了時: 本日の unrevealed を一斉に解放 → バッジチェック
   Future<void> revealToday() async {
     final list = state.encounters.map((e) {
       if (e.metToday && !e.isRevealed) return e.reveal();
       return e;
     }).toList();
-    state = state.copyWith(encounters: list, hasNewEncounter: false);
+
+    final totalRevealed = list.where((e) => e.isRevealed).length;
+    final updatedBadges = await BadgeService.checkCountBadges(
+      totalRevealed: totalRevealed,
+      existing: state.badges,
+    );
+    final newlyEarned = updatedBadges
+        .where((b) => !state.badges.any((ob) => ob.id == b.id))
+        .toList();
+
+    state = state.copyWith(
+      encounters:        list,
+      hasNewEncounter:   false,
+      badges:            updatedBadges,
+      newlyEarnedBadges: newlyEarned,
+    );
     await _storage.saveEncounters(list);
   }
 
   // ─── Encounter ───────────────────────────────────────────────────────────
 
   Future<void> _onEncounter(EncounterEvent event) async {
-    final peerId = event.peerId;
-    debugPrint('[Encounter] name=${event.name} id=${peerId.substring(28)}');
+    debugPrint('[Encounter] name=${event.name} id=${event.peerId.substring(28)}');
+    // ウォームアップ振動（生存シグナル）は v1.4.1 で削除 → 切断通知に移行
+    await _upsertEncounter(
+      peerId:     event.peerId,
+      name:       event.name,
+      colorIndex: event.colorIndex,
+      template:   event.template,
+      rssi:       event.rssi,
+    );
+    debugPrint('[App] encountered: ${event.name}');
+  }
 
-    final last = _cooldown[peerId];
-    if (last != null && DateTime.now().difference(last).inMinutes < 60) {
-      debugPrint('[Encounter] cooldown skip');
+  // 切断イベント → ランダム 10〜60分後に通知スケジュール
+  Future<void> _onDeparture(String peerId) async {
+    final last = _notifScheduled[peerId];
+    final now  = DateTime.now();
+    // 同じ人に対し12時間以内に重複スケジュールしない
+    if (last != null && now.difference(last).inHours < 12) {
+      debugPrint('[Departure] skip notif for ${peerId.substring(28)} (cooldown)');
       return;
     }
-    _cooldown[peerId] = DateTime.now();
+    _notifScheduled[peerId] = now;
 
-    // 生存シグナル: 5〜10分のランダム遅延後に短く振動（個人特定防止）
-    _scheduleVibration();
-
-    await _upsertEncounter(
-      peerId: peerId,
-      name: event.name,
-      colorIndex: event.colorIndex,
-      template: event.template,
-      rssi: event.rssi,
+    final delayMin = _rng.nextInt(51) + 10; // 10〜60分
+    final settings = await NotificationService.loadSettings();
+    await NotificationService.scheduleEncounterNotification(
+      peerId:       peerId,
+      delayMinutes: delayMin,
+      revealHour:   settings.hour,
     );
-
-    debugPrint('[App] encountered: ${event.name}');
+    debugPrint('[Departure] scheduled notif in ${delayMin}min for ${peerId.substring(28)}');
   }
 
   Future<void> _upsertEncounter({
@@ -269,27 +322,23 @@ class AppNotifier extends Notifier<AppState> {
 
     if (idx >= 0) {
       final existing = list.removeAt(idx);
-      final updated = existing.updatedWith(
-        lastMet: now,
-        rssi: rssi,
-        name: name,
+      list.insert(0, existing.updatedWith(
+        lastMet:  now,
+        rssi:     rssi,
+        name:     name,
         template: template,
-      );
-      list.insert(0, updated);
+      ));
     } else {
-      list.insert(
-        0,
-        EncounterRecord(
-          peerId: peerId,
-          name: name,
-          colorIndex: colorIndex,
-          firstMet: now,
-          lastMet: now,
-          meetCount: 1,
-          rssi: rssi,
-          template: template,
-        ),
-      );
+      list.insert(0, EncounterRecord(
+        peerId:     peerId,
+        name:       name,
+        colorIndex: colorIndex,
+        firstMet:   now,
+        lastMet:    now,
+        meetCount:  1,
+        rssi:       rssi,
+        template:   template,
+      ));
     }
 
     final trimmed = list.take(500).toList();
@@ -297,35 +346,11 @@ class AppNotifier extends Notifier<AppState> {
     await _storage.saveEncounters(trimmed);
   }
 
-  // ─── 生存シグナル振動（5〜10分ランダム遅延） ─────────────────────────────
-
-  void _scheduleVibration() {
-    final delaySec = _rng.nextInt(300) + 300; // 300〜600 秒 = 5〜10 分
-    final t = Timer(Duration(seconds: delaySec), _doVibrate);
-    _vibTimers.add(t);
-    debugPrint('[Vibration] scheduled in ${delaySec}s');
-  }
-
-  Future<void> _doVibrate() async {
-    try {
-      final settings = await NotificationService.loadSettings();
-      if (!settings.vibrationEnabled) return;
-      // 「トトッ」= 2連続 mediumImpact（フォアグラウンドサービス稼働中はBGでも動作）
-      await HapticFeedback.mediumImpact();
-      await Future.delayed(const Duration(milliseconds: 150));
-      await HapticFeedback.mediumImpact();
-      debugPrint('[Vibration] fired');
-    } catch (e) {
-      debugPrint('[Vibration] error: $e');
-    }
-  }
-
   @override
   void dispose() {
-    for (final t in _vibTimers) t.cancel();
-    _vibTimers.clear();
     _btStateSub?.cancel();
     _encounterSub?.cancel();
+    _departureSub?.cancel();
     _scanner.dispose();
   }
 }

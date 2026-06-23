@@ -1,4 +1,6 @@
 class TemplateMessage {
+  static const kNotSet = -1; // 未回答
+
   static const statusList = [
     'すれ違い中！',
     '学校・職場にいます',
@@ -55,20 +57,24 @@ class TemplateMessage {
     this.phraseIndex = 0,
   });
 
-  String get statusText =>
-      statusList[statusIndex.clamp(0, statusList.length - 1)];
+  String get statusText => statusIndex == kNotSet
+      ? '未回答'
+      : statusList[statusIndex.clamp(0, statusList.length - 1)];
 
-  String get hobbyCategoryText =>
-      hobbyCategories[hobbyCategory.clamp(0, hobbyCategories.length - 1)];
+  String get hobbyCategoryText => hobbyCategory == kNotSet
+      ? '未回答'
+      : hobbyCategories[hobbyCategory.clamp(0, hobbyCategories.length - 1)];
 
   String get hobbyDetailText {
+    if (hobbyDetail == kNotSet || hobbyCategory == kNotSet) return '未回答';
     final cat = hobbyCategory.clamp(0, hobbyDetails.length - 1);
     final details = hobbyDetails[cat];
     return details[hobbyDetail.clamp(0, details.length - 1)];
   }
 
-  String get phraseText =>
-      phraseList[phraseIndex.clamp(0, phraseList.length - 1)];
+  String get phraseText => phraseIndex == kNotSet
+      ? '未回答'
+      : phraseList[phraseIndex.clamp(0, phraseList.length - 1)];
 
   TemplateMessage copyWith({
     int? statusIndex,

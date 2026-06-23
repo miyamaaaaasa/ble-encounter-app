@@ -7,9 +7,10 @@ import 'package:timezone/timezone.dart' as tz;
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
 
-  static const dailyChannelId   = 'daily_result';
-  static const eventChannelId   = 'event_info';
-  static const _dailyNotifId    = 100;
+  static const dailyChannelId     = 'daily_result';
+  static const eventChannelId     = 'event_info';
+  static const encounterChannelId = 'encounter_detect';
+  static const _dailyNotifId      = 100;
 
   static const prefHour             = 'notif_hour';
   static const prefDailyEnabled     = 'notif_daily_enabled';
@@ -48,6 +49,15 @@ class NotificationService {
           eventChannelId, 'イベント・お知らせ',
           description: 'アプリからのお知らせ',
           importance: Importance.high,
+        ),
+      );
+      await androidImpl?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          encounterChannelId, 'すれ違い検知',
+          description: 'すれ違いを検知したときに通知します',
+          importance: Importance.low,
+          enableVibration: false,
+          playSound: false,
         ),
       );
     } catch (e) {
@@ -153,6 +163,44 @@ class NotificationService {
       await prefs.setBool(key, value);
     } catch (e) {
       debugPrint('[Notif] setPref: $e');
+    }
+  }
+
+  // すれ違い検知通知（切断後 delayMinutes 後に届く・バイブなし）
+  static Future<void> scheduleEncounterNotification({
+    required String peerId,
+    required int delayMinutes,
+    required int revealHour,
+  }) async {
+    try {
+      final notifId = peerId.hashCode.abs() % 200 + 300;
+
+      tz.TZDateTime now;
+      try { now = tz.TZDateTime.now(tz.local); }
+      catch (_) { now = tz.TZDateTime.now(tz.UTC); }
+
+      final scheduledAt = now.add(Duration(minutes: delayMinutes));
+      final hh = revealHour.toString().padLeft(2, '0');
+
+      await _plugin.zonedSchedule(
+        notifId,
+        'すれ違いを検知しました',
+        '誰かとすれ違いました。$hh:00 に誰かを確認できます',
+        scheduledAt,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            encounterChannelId, 'すれ違い検知',
+            importance: Importance.low,
+            playSound: false,
+            enableVibration: false,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (e) {
+      debugPrint('[Notif] scheduleEncounter: $e');
     }
   }
 

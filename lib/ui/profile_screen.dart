@@ -93,10 +93,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     // hobbyDetail のアイテム（カテゴリ変更時に連動）
-    final detailItems =
-        TemplateMessage.hobbyDetails[_template.hobbyCategory];
-    final safeDetail =
-        _template.hobbyDetail.clamp(0, detailItems.length - 1);
+    final catIdx     = _template.hobbyCategory.clamp(0, TemplateMessage.hobbyDetails.length - 1);
+    final detailItems = TemplateMessage.hobbyDetails[catIdx];
+    final safeDetail  = _template.hobbyDetail == -1
+        ? -1
+        : _template.hobbyDetail.clamp(0, detailItems.length - 1);
 
     final body = CustomScrollView(
       slivers: [
@@ -141,20 +142,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               DropdownButtonFormField<int>(
                 value: _template.statusIndex,
                 decoration: const InputDecoration(
-                  labelText: '状態',
+                  labelText: '状態（任意）',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.emoji_emotions_outlined),
                 ),
-                items: TemplateMessage.statusList
-                    .asMap()
-                    .entries
-                    .map((e) => DropdownMenuItem(
-                        value: e.key, child: Text(e.value)))
-                    .toList(),
+                items: [
+                  const DropdownMenuItem(value: -1, child: Text('未回答')),
+                  ...TemplateMessage.statusList
+                      .asMap()
+                      .entries
+                      .map((e) => DropdownMenuItem(
+                          value: e.key, child: Text(e.value))),
+                ],
                 onChanged: (v) {
                   if (v == null) return;
-                  setState(
-                      () => _template = _template.copyWith(statusIndex: v));
+                  setState(() => _template = _template.copyWith(statusIndex: v));
                 },
               ),
               const SizedBox(height: 12),
@@ -163,65 +165,71 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               DropdownButtonFormField<int>(
                 value: _template.hobbyCategory,
                 decoration: const InputDecoration(
-                  labelText: '趣味カテゴリ',
+                  labelText: '趣味カテゴリ（任意）',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.interests_outlined),
                 ),
-                items: TemplateMessage.hobbyCategories
-                    .asMap()
-                    .entries
-                    .map((e) => DropdownMenuItem(
-                        value: e.key, child: Text(e.value)))
-                    .toList(),
+                items: [
+                  const DropdownMenuItem(value: -1, child: Text('未回答')),
+                  ...TemplateMessage.hobbyCategories
+                      .asMap()
+                      .entries
+                      .map((e) => DropdownMenuItem(
+                          value: e.key, child: Text(e.value))),
+                ],
                 onChanged: (v) {
                   if (v == null) return;
                   setState(() => _template = _template.copyWith(
-                      hobbyCategory: v, hobbyDetail: 0));
+                      hobbyCategory: v,
+                      hobbyDetail: v == -1 ? -1 : 0));
                 },
               ),
               const SizedBox(height: 12),
 
               // 趣味詳細（カテゴリ連動）
-              DropdownButtonFormField<int>(
-                key: ValueKey(_template.hobbyCategory),
-                value: safeDetail,
-                decoration: const InputDecoration(
-                  labelText: '趣味詳細',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.tag_outlined),
+              if (_template.hobbyCategory != -1)
+                DropdownButtonFormField<int>(
+                  key: ValueKey(_template.hobbyCategory),
+                  value: safeDetail,
+                  decoration: const InputDecoration(
+                    labelText: '趣味詳細（任意）',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.tag_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: -1, child: Text('未回答')),
+                    ...detailItems
+                        .asMap()
+                        .entries
+                        .map((e) => DropdownMenuItem(
+                            value: e.key, child: Text(e.value))),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _template = _template.copyWith(hobbyDetail: v));
+                  },
                 ),
-                items: detailItems
-                    .asMap()
-                    .entries
-                    .map((e) => DropdownMenuItem(
-                        value: e.key, child: Text(e.value)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(
-                      () => _template = _template.copyWith(hobbyDetail: v));
-                },
-              ),
-              const SizedBox(height: 12),
+              if (_template.hobbyCategory != -1) const SizedBox(height: 12),
 
               // 締めの一言
               DropdownButtonFormField<int>(
                 value: _template.phraseIndex,
                 decoration: const InputDecoration(
-                  labelText: '締めの一言',
+                  labelText: '締めの一言（任意）',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.chat_bubble_outline),
                 ),
-                items: TemplateMessage.phraseList
-                    .asMap()
-                    .entries
-                    .map((e) => DropdownMenuItem(
-                        value: e.key, child: Text(e.value)))
-                    .toList(),
+                items: [
+                  const DropdownMenuItem(value: -1, child: Text('未回答')),
+                  ...TemplateMessage.phraseList
+                      .asMap()
+                      .entries
+                      .map((e) => DropdownMenuItem(
+                          value: e.key, child: Text(e.value))),
+                ],
                 onChanged: (v) {
                   if (v == null) return;
-                  setState(
-                      () => _template = _template.copyWith(phraseIndex: v));
+                  setState(() => _template = _template.copyWith(phraseIndex: v));
                 },
               ),
               const SizedBox(height: 12),

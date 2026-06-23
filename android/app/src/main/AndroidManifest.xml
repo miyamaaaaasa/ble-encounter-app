@@ -57,7 +57,7 @@
     </queries>
 
     <application
-        android:label="すれ違い"
+        android:label="はじめましてこんにちは"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

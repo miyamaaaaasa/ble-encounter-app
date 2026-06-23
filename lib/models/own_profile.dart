@@ -26,10 +26,10 @@ class OwnProfile {
     out.addByte(colorIndex & 0xFF);
     out.add(nameBytes);
     out.addByte(0x00);
-    out.addByte(template.statusIndex & 0xFF);
-    out.addByte(template.hobbyCategory & 0xFF);
-    out.addByte(template.hobbyDetail & 0xFF);
-    out.addByte(template.phraseIndex & 0xFF);
+    out.addByte(template.statusIndex   == -1 ? 0xFF : template.statusIndex   & 0xFF);
+    out.addByte(template.hobbyCategory == -1 ? 0xFF : template.hobbyCategory & 0xFF);
+    out.addByte(template.hobbyDetail   == -1 ? 0xFF : template.hobbyDetail   & 0xFF);
+    out.addByte(template.phraseIndex   == -1 ? 0xFF : template.phraseIndex   & 0xFF);
     return out.takeBytes();
   }
 
