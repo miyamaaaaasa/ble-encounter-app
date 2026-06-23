@@ -1,0 +1,52 @@
+name: ble_encounter
+description: BLEすれ違い検知アプリ
+publish_to: 'none'
+version: 1.2.0+4
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 状態管理
+  flutter_riverpod: ^2.5.1
+
+  # BLE スキャン
+  flutter_blue_plus: ^1.32.12
+
+  # ローカル保存
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.2
+
+  # CSV エクスポート共有
+  share_plus: ^9.0.0
+
+  # パーミッション要求
+  permission_handler: ^11.3.1
+
+  # 一時 ID 生成
+  uuid: ^4.4.2
+
+  # URL タップ対応
+  url_launcher: ^6.3.0
+
+  # アイコンアップロード
+  image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.0
+
+  # バージョン表示
+  package_info_plus: ^8.1.0
+
+  # 通知スケジュール
+  flutter_local_notifications: ^17.2.3
+  timezone: ^0.9.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

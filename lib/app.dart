@@ -1,0 +1,49 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/ble_providers.dart';
+import 'ui/home_screen.dart';
+import 'ui/profile_screen.dart';
+
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'すれ違い',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorSchemeSeed: const Color(0xFF378ADD),
+        useMaterial3: true,
+        brightness: Brightness.light,
+      ),
+      darkTheme: ThemeData(
+        colorSchemeSeed: const Color(0xFF378ADD),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+      ),
+      home: const _RootScreen(),
+    );
+  }
+}
+
+class _RootScreen extends ConsumerWidget {
+  const _RootScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(appProvider);
+
+    if (state.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (state.ownProfile == null) {
+      return const ProfileScreen(isFirstLaunch: true);
+    }
+
+    return const HomeScreen();
+  }
+}
