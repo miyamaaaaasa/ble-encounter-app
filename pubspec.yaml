@@ -1,7 +1,7 @@
 name: ble_encounter
 description: BLEすれ違い検知アプリ
 publish_to: 'none'
-version: 1.5.7+14
+version: 1.5.8+15
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

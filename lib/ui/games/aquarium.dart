@@ -14,17 +14,25 @@ class AquariumScreen extends StatefulWidget {
   State<AquariumScreen> createState() => _AquariumScreenState();
 }
 
-class _AquariumScreenState extends State<AquariumScreen> {
+class _AquariumScreenState extends State<AquariumScreen>
+    with SingleTickerProviderStateMixin {
   List<AquariumFish> _pond    = []; // 今日の池（未釣り）
   List<AquariumFish> _fishBook= []; // 図鑑（釣り上げた全魚）
   Set<String> _todayFish      = {};
   bool _loading               = true;
-  int _tab                    = 0; // 0=池, 1=図鑑
+  late TabController _tabCtrl;
 
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: 2, vsync: this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -99,16 +107,20 @@ class _AquariumScreenState extends State<AquariumScreen> {
       appBar: AppBar(
         title: const Text('すれちがい水族館'),
         bottom: TabBar(
-          controller: null,
-          onTap: (i) => setState(() => _tab = i),
+          controller: _tabCtrl,
           tabs: [
             Tab(text: '🏊 釣り場（${_pond.length}匹）'),
             Tab(text: '📖 図鑑（${_fishBook.length}匹）'),
           ],
         ),
       ),
-      body: _tab == 0 ? _PondView(pond: _pond, onCatch: _catchFish)
-                      : _FishBookView(book: _fishBook),
+      body: TabBarView(
+        controller: _tabCtrl,
+        children: [
+          _PondView(pond: _pond, onCatch: _catchFish),
+          _FishBookView(book: _fishBook),
+        ],
+      ),
     );
   }
 }
