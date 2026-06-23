@@ -23,13 +23,17 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install dependencies
+      - name: Install Flutter dependencies
         run: flutter pub get
 
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods
+        env:
+          LANG: en_US.UTF-8
+
       - name: Install CocoaPods dependencies
-        run: |
-          cd ios
-          pod install --repo-update
+        run: pod install --repo-update
+        working-directory: ios
         env:
           LANG: en_US.UTF-8
 
