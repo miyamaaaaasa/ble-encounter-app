@@ -6,7 +6,6 @@ import 'encounter_helpers.dart';
 import 'encounter_detail_sheet.dart';
 
 // BGM トラック定義（音声ファイルは assets/bgm/ に配置してください）
-// 累計すれ違い数に応じて豪華なトラックに切り替わります
 String bgmTrackFor(int total) {
   if (total >= 10000) return 'bgm_10000.mp3';
   if (total >= 3000)  return 'bgm_3000.mp3';
@@ -28,17 +27,8 @@ class PlazaScreen extends ConsumerStatefulWidget {
 
 class _PlazaScreenState extends ConsumerState<PlazaScreen> {
   @override
-  void initState() {
-    super.initState();
-    // TODO: 音声ファイルが揃ったら AudioPlayer を初期化してBGM再生
-    // import 'package:audioplayers/audioplayers.dart';
-    // _player.play(AssetSource(bgmTrackFor(total)));
-  }
-
-  @override
   Widget build(BuildContext context) {
     final state    = ref.watch(appProvider);
-    // 広場には開封済みのみ表示（プライバシー保護）
     final revealed = state.encounters
         .where((e) => e.isRevealed)
         .toList()
@@ -47,11 +37,13 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
 
     return CustomScrollView(
       slivers: [
-        // ─── ヘッダー ─────────────────────────────────────────────────────
+        // ─── ヘッダー（タイトルと総数の重複を解消）────────────────────────
         SliverAppBar(
           pinned: true,
-          expandedHeight: 140,
+          title: const Text('広場'),
+          expandedHeight: 96,
           flexibleSpace: FlexibleSpaceBar(
+            // title は SliverAppBar 側に任せ、background に累計数のみ表示
             background: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -65,37 +57,25 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
               ),
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 48, 20, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 52, 20, 8),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Icon(Icons.people_outline, size: 28),
-                      const SizedBox(width: 8),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '累計すれ違い',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.outline),
-                          ),
-                          Text(
-                            '$total 人',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                      Icon(Icons.people_outline,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.outline),
+                      const SizedBox(width: 6),
+                      Text(
+                        '累計 $total 人',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                       ),
                     ],
                   ),
                 ),
               ),
             ),
-            title: const Text('広場'),
           ),
         ),
 
@@ -190,6 +170,7 @@ class _PlazaTile extends StatelessWidget {
                               fontSize: 11,
                               color: Theme.of(context).colorScheme.outline)),
                       const SizedBox(width: 8),
+                      // 再遭遇回数は抽象ラベルで表示（数字非公開）
                       Text(encounterLabel(encounter.meetCount),
                           style: TextStyle(
                               fontSize: 11,
@@ -199,7 +180,7 @@ class _PlazaTile extends StatelessWidget {
                 ],
               ),
             ),
-            // レアリティラベル
+            // レアリティラベル（「白」→「ノーマル」に変更済み）
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(

@@ -17,7 +17,8 @@ class TodayScreen extends ConsumerStatefulWidget {
 class _TodayScreenState extends ConsumerState<TodayScreen> {
   int      _notifHour = 18;
   Timer?   _countdownTimer;
-  Duration _remaining = Duration.zero;
+  Duration _remaining         = Duration.zero;
+  Duration _tomorrowRemaining = Duration.zero; // 0:00設定時の翌日カウントダウン
   bool     _gateOpen  = false;
 
   @override
@@ -42,20 +43,53 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     });
   }
 
+  // 通知時刻に応じた「今日公開するバッチの日付」
+  DateTime get _revealDate {
+    final now = DateTime.now();
+    if (_notifHour == 0) {
+      final y = now.subtract(const Duration(days: 1));
+      return DateTime(y.year, y.month, y.day);
+    }
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  bool _isRevealBatch(EncounterRecord e) {
+    final d = _revealDate;
+    return e.lastMet.year == d.year &&
+           e.lastMet.month == d.month &&
+           e.lastMet.day == d.day;
+  }
+
   void _updateGate() {
-    final now  = DateTime.now();
+    final now = DateTime.now();
+
+    if (_notifHour == 0) {
+      // 0:00 設定: ゲートは常時オープン（昨日の出会いが表示対象）
+      // 今日の出会いは翌日 00:00 から → 翌日カウントダウンを継続表示
+      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      setState(() {
+        _gateOpen          = true;
+        _remaining         = Duration.zero;
+        _tomorrowRemaining = tomorrow.difference(now);
+      });
+      // タイマーは継続（カウントダウン更新のため）
+      return;
+    }
+
     final open = now.hour >= _notifHour;
     if (open) {
       setState(() {
-        _gateOpen  = true;
-        _remaining = Duration.zero;
+        _gateOpen          = true;
+        _remaining         = Duration.zero;
+        _tomorrowRemaining = Duration.zero;
       });
       _countdownTimer?.cancel();
     } else {
       final target = DateTime(now.year, now.month, now.day, _notifHour);
       setState(() {
-        _gateOpen  = false;
-        _remaining = target.difference(now);
+        _gateOpen          = false;
+        _remaining         = target.difference(now);
+        _tomorrowRemaining = Duration.zero;
       });
     }
   }
@@ -77,8 +111,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       }
     });
 
-    final todayUnrev  = state.encounters.where((e) => e.metToday && !e.isRevealed).toList();
-    final todayRev    = state.encounters.where((e) => e.metToday && e.isRevealed).toList();
+    final todayUnrev  = state.encounters.where((e) => _isRevealBatch(e) && !e.isRevealed).toList();
+    final todayRev    = state.encounters.where((e) => _isRevealBatch(e) && e.isRevealed).toList();
     final alreadyDone = todayRev.isNotEmpty;
 
     return CustomScrollView(
@@ -155,20 +189,29 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             ),
           ),
 
+        // ─── 0:00 設定: 今日の出会いは翌日 00:00 まで閉鎖 ─────────────────
+        if (_gateOpen && _notifHour == 0 && todayUnrev.isEmpty && !alreadyDone)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _ZeroHourWaiting(remaining: _tomorrowRemaining),
+          ),
+
         // ─── 開封可能（まだ未確認がある）───────────────────────────────────
-        if (_gateOpen && !alreadyDone)
+        if (_gateOpen && !alreadyDone && (_notifHour != 0 || todayUnrev.isNotEmpty))
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
               child: Column(
                 children: [
-                  Text(
-                    '${_notifHour.toString().padLeft(2, '0')}:00 になりました',
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.primary),
-                  ),
-                  const SizedBox(height: 16),
+                  if (_notifHour != 0) ...[
+                    Text(
+                      '${_notifHour.toString().padLeft(2, '0')}:00 になりました',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.primary),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   FilledButton.icon(
                     onPressed: todayUnrev.isEmpty ? null : () {
                       Navigator.push(
@@ -679,6 +722,44 @@ class _InfoRow extends StatelessWidget {
       );
 }
 
+// ─── 0:00 設定: 翌日 00:00 まで待機 ─────────────────────────────────────────
+
+class _ZeroHourWaiting extends StatelessWidget {
+  final Duration remaining;
+  const _ZeroHourWaiting({required this.remaining});
+
+  @override
+  Widget build(BuildContext context) {
+    final h  = remaining.inHours.toString().padLeft(2, '0');
+    final mm = (remaining.inMinutes % 60).toString().padLeft(2, '0');
+    final ss = (remaining.inSeconds % 60).toString().padLeft(2, '0');
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.schedule_outlined, size: 64,
+            color: Theme.of(context).colorScheme.outlineVariant),
+        const SizedBox(height: 20),
+        Text('今日の出会いは',
+            style: TextStyle(fontSize: 14,
+                color: Theme.of(context).colorScheme.outline)),
+        const SizedBox(height: 4),
+        Text('明日 00:00 から確認できます',
+            style: TextStyle(fontSize: 14,
+                color: Theme.of(context).colorScheme.outline)),
+        const SizedBox(height: 20),
+        Text('$h:$mm:$ss',
+            style: TextStyle(
+              fontSize: 48,
+              fontWeight: FontWeight.w300,
+              color: Theme.of(context).colorScheme.primary,
+              letterSpacing: 4,
+            )),
+      ],
+    );
+  }
+}
+
 // ─── 開封済みタイル ───────────────────────────────────────────────────────────
 
 class _RevealedTile extends StatelessWidget {
@@ -709,10 +790,12 @@ class _RevealedTile extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text(
               '${encounter.template.statusText} · ${encounter.template.hobbyCategoryText}'),
-          trailing: Text('${encounter.meetCount}回',
+          trailing: Text(
+              encounterLabel(encounter.meetCount),
               style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.outline)),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: encounterLabelColor(encounter.meetCount, context))),
         ),
       ),
     );

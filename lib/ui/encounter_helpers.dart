@@ -11,7 +11,7 @@ CardRarity cardRarityOf(int meetCount) {
 }
 
 String rarityLabel(CardRarity r) => switch (r) {
-  CardRarity.common   => '白',
+  CardRarity.common   => 'ノーマル',
   CardRarity.craft    => 'クラフト',
   CardRarity.gradient => 'グラデ',
   CardRarity.hologram => 'ホログラム',

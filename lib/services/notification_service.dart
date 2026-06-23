@@ -25,6 +25,9 @@ class NotificationService {
 
   static bool _initialized = false;
 
+  // 日次通知タップ時に呼ばれるコールバック（HomeScreen が登録）
+  static void Function()? onDailyNotificationTap;
+
   // UTC フォールバックを完全廃止。常に Asia/Tokyo を使う。
   static tz.Location _location() {
     try { return tz.local; } catch (_) {}
@@ -40,7 +43,15 @@ class NotificationService {
       try { tz.setLocalLocation(tz.getLocation('Asia/Tokyo')); } catch (_) {}
 
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-      await _plugin.initialize(const InitializationSettings(android: android));
+      await _plugin.initialize(
+        const InitializationSettings(android: android),
+        onDidReceiveNotificationResponse: (response) {
+          // 日次通知タップ → 今日タブへ
+          if (response.id == _dailyNotifId) {
+            onDailyNotificationTap?.call();
+          }
+        },
+      );
 
       final androidImpl = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();

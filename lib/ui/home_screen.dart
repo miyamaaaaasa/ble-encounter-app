@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/ble_providers.dart';
+import '../services/notification_service.dart';
 import 'today_screen.dart';
 import 'plaza_screen.dart';
 import 'minigame_screen.dart';
@@ -33,6 +34,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 日次通知タップで今日タブ(0)に切り替え
+    NotificationService.onDailyNotificationTap = () {
+      if (mounted) setState(() => _selectedIndex = 0);
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkBatteryOptimization();
       _showNewBadgeIfAny();
@@ -41,6 +46,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   void dispose() {
+    NotificationService.onDailyNotificationTap = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

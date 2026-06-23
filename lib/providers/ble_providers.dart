@@ -117,23 +117,32 @@ class AppNotifier extends Notifier<AppState> {
     }
   }
 
-  Future<void> _loadData() async {
-    final profile  = await _storage.loadOwnProfile();
-    var encounters = await _storage.loadEncounters();
-    final badges   = await BadgeService.load();
+  // 通知時刻に応じた「現在の公開バッチ日付」を返す
+  // _notifHour==0: 昨日（0:00設定時は今日の出会いを翌日に公開）
+  // それ以外: 今日
+  static DateTime _revealBatchDate(int notifHour) {
+    final now = DateTime.now();
+    if (notifHour == 0) {
+      final y = now.subtract(const Duration(days: 1));
+      return DateTime(y.year, y.month, y.day);
+    }
+    return DateTime(now.year, now.month, now.day);
+  }
 
-    // 翌日自動救済: 今日より前の未開封エンカウントを自動解放
-    final todayStart = DateTime.now();
+  Future<void> _loadData() async {
+    final profile      = await _storage.loadOwnProfile();
+    var encounters     = await _storage.loadEncounters();
+    final badges       = await BadgeService.load();
+    final notifSettings = await NotificationService.loadSettings();
+
+    // 翌日自動救済: 公開バッチ日付より古い未開封エンカウントを自動解放
+    final batchDate = _revealBatchDate(notifSettings.hour);
     final hasOldUnrevealed = encounters.any(
-      (e) => !e.isRevealed && (
-        e.lastMet.year < todayStart.year ||
-        e.lastMet.month < todayStart.month ||
-        e.lastMet.day < todayStart.day
-      ),
+      (e) => !e.isRevealed && e.lastMet.isBefore(batchDate),
     );
     if (hasOldUnrevealed) {
       encounters = encounters.map((e) {
-        if (!e.isRevealed && !e.metToday) return e.reveal();
+        if (!e.isRevealed && e.lastMet.isBefore(batchDate)) return e.reveal();
         return e;
       }).toList();
       await _storage.saveEncounters(encounters);
@@ -316,10 +325,15 @@ class AppNotifier extends Notifier<AppState> {
     state = state.copyWith(newlyEarnedBadges: []);
   }
 
-  // 結果演出完了時: 本日の unrevealed を一斉に解放 → バッジチェック
+  // 結果演出完了時: 公開バッチ日付の unrevealed を一斉に解放 → バッジチェック
   Future<void> revealToday() async {
+    final settings  = await NotificationService.loadSettings();
+    final batchDate = _revealBatchDate(settings.hour);
     final list = state.encounters.map((e) {
-      if (e.metToday && !e.isRevealed) return e.reveal();
+      final sameDay = e.lastMet.year == batchDate.year &&
+                      e.lastMet.month == batchDate.month &&
+                      e.lastMet.day == batchDate.day;
+      if (sameDay && !e.isRevealed) return e.reveal();
       return e;
     }).toList();
 
