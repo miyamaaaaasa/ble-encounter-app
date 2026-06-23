@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../core/peer_id.dart';
 import '../models/own_profile.dart';
 import '../models/encounter_record.dart';
+import '../models/template_message.dart';
 import '../services/advertiser.dart';
 import '../services/scanner.dart';
 import '../services/profile_storage.dart';
@@ -54,7 +55,6 @@ class AppNotifier extends Notifier<AppState> {
   final _scanner    = BleScanner();
   final _storage    = ProfileStorage();
 
-  // peerId → 最終記録日時（1 時間クールダウン）
   final _cooldown = <String, DateTime>{};
 
   StreamSubscription<EncounterEvent>? _encounterSub;
@@ -73,7 +73,6 @@ class AppNotifier extends Notifier<AppState> {
       ownProfile: profile,
       encounters: encounters,
     );
-    // プロフィールがあれば自動起動
     if (profile != null) {
       await _autoStart();
     }
@@ -89,7 +88,6 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> saveOwnProfile(OwnProfile profile) async {
     final isFirstSave = state.ownProfile == null;
 
-    // 初回登録日を設定
     final withDate = profile.registeredAt != null
         ? profile
         : profile.copyWith(registeredAt: DateTime.now());
@@ -98,7 +96,6 @@ class AppNotifier extends Notifier<AppState> {
     state = state.copyWith(ownProfile: withDate, errorMessage: null);
 
     if (state.isRunning) {
-      // 広告を新プロフィールで再起動
       try {
         await _advertiser.stopAdvertise();
         await _advertiser.startAdvertise(PeerId.bytes, withDate.toScanPayload());
@@ -106,7 +103,6 @@ class AppNotifier extends Notifier<AppState> {
         debugPrint('[App] profile update error: $e');
       }
     } else if (isFirstSave) {
-      // 初回プロフィール設定後に自動起動
       await _autoStart();
     }
   }
@@ -145,7 +141,6 @@ class AppNotifier extends Notifier<AppState> {
     }
 
     try {
-      // encounters を先にサブスクライブ（start() 後だとイベントが消える）
       _encounterSub = _scanner.encounters.listen(_onEncounter);
       await _advertiser.startForegroundService();
       await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload());
@@ -153,7 +148,6 @@ class AppNotifier extends Notifier<AppState> {
       state = state.copyWith(isRunning: true, errorMessage: null);
       debugPrint('[App] started peerId=${PeerId.hex}');
 
-      // 毎日の通知をスケジュール
       final notifSettings = await NotificationService.loadSettings();
       if (notifSettings.dailyEnabled) {
         await NotificationService.scheduleDailyNotification(
@@ -191,7 +185,6 @@ class AppNotifier extends Notifier<AppState> {
     final peerId = event.peerId;
     debugPrint('[Encounter] name=${event.name} id=${peerId.substring(28)}');
 
-    // 1 時間クールダウン
     final last = _cooldown[peerId];
     if (last != null && DateTime.now().difference(last).inMinutes < 60) {
       debugPrint('[Encounter] cooldown skip');
@@ -202,16 +195,10 @@ class AppNotifier extends Notifier<AppState> {
     await _upsertEncounter(
       peerId: peerId,
       name: event.name,
-      message: event.message,
       colorIndex: event.colorIndex,
+      template: event.template,
       rssi: event.rssi,
     );
-
-    try {
-      await NotificationService.showEncounterNotification(event.name);
-    } catch (e) {
-      debugPrint('[App] notification error: $e');
-    }
 
     debugPrint('[App] encountered: ${event.name}');
   }
@@ -219,8 +206,8 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> _upsertEncounter({
     required String peerId,
     required String name,
-    required String message,
     required int colorIndex,
+    required TemplateMessage template,
     required int rssi,
   }) async {
     final now  = DateTime.now();
@@ -233,7 +220,7 @@ class AppNotifier extends Notifier<AppState> {
         lastMet: now,
         rssi: rssi,
         name: name,
-        message: message.isNotEmpty ? message : existing.message,
+        template: template,
       );
       list.insert(0, updated);
     } else {
@@ -242,12 +229,12 @@ class AppNotifier extends Notifier<AppState> {
         EncounterRecord(
           peerId: peerId,
           name: name,
-          message: message,
           colorIndex: colorIndex,
           firstMet: now,
           lastMet: now,
           meetCount: 1,
           rssi: rssi,
+          template: template,
         ),
       );
     }

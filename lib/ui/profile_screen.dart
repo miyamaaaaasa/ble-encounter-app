@@ -2,18 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/own_profile.dart';
+import '../models/template_message.dart';
 import '../providers/ble_providers.dart';
+import 'encounter_helpers.dart';
 
-const avatarColors = [
-  Color(0xFF378ADD),
-  Color(0xFF1D9E75),
-  Color(0xFFD85A30),
-  Color(0xFFBA7517),
-  Color(0xFF534AB7),
-  Color(0xFFD4537E),
-];
-
-// ASCII 印字可能文字のみ許可（スペース〜チルダ）
 final _asciiFormatter =
     FilteringTextInputFormatter.allow(RegExp(r'[\x20-\x7E]'));
 
@@ -30,40 +22,37 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _nameCtrl;
-  late TextEditingController _msgCtrl;
   late int _colorIndex;
+  late TemplateMessage _template;
 
   @override
   void initState() {
     super.initState();
     final profile = ref.read(appProvider).ownProfile;
     _nameCtrl = TextEditingController(text: profile?.name ?? '');
-    _msgCtrl = TextEditingController(text: profile?.message ?? '');
     _colorIndex = profile?.colorIndex ?? 0;
+    _template = profile?.template ?? const TemplateMessage();
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _msgCtrl.dispose();
     super.dispose();
   }
 
-  // IME 経由で日本語が差し込まれた場合もここで弾く
-  void _sanitize(TextEditingController ctrl, {bool rebuild = false}) {
-    final filtered = _stripNonAscii(ctrl.text);
-    if (filtered != ctrl.text) {
-      ctrl.value = TextEditingValue(
+  void _sanitizeName() {
+    final filtered = _stripNonAscii(_nameCtrl.text);
+    if (filtered != _nameCtrl.text) {
+      _nameCtrl.value = TextEditingValue(
         text: filtered,
         selection: TextSelection.collapsed(offset: filtered.length),
       );
     }
-    if (rebuild) setState(() {});
+    setState(() {});
   }
 
   Future<void> _save() async {
-    _sanitize(_nameCtrl);
-    _sanitize(_msgCtrl);
+    _sanitizeName();
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,8 +64,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await ref.read(appProvider.notifier).saveOwnProfile(
           OwnProfile(
             name: name,
-            message: _msgCtrl.text.trim(),
             colorIndex: _colorIndex,
+            template: _template,
             registeredAt: existing?.registeredAt,
           ),
         );
@@ -103,6 +92,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
 
+    // hobbyDetail のアイテム（カテゴリ変更時に連動）
+    final detailItems =
+        TemplateMessage.hobbyDetails[_template.hobbyCategory];
+    final safeDetail =
+        _template.hobbyDetail.clamp(0, detailItems.length - 1);
+
     final body = CustomScrollView(
       slivers: [
         if (!widget.isFirstLaunch)
@@ -120,6 +115,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 12),
               Center(child: avatar),
               const SizedBox(height: 28),
+
+              // ─── 名前 ─────────────────────────────────────────────
               TextField(
                 controller: _nameCtrl,
                 maxLength: 10,
@@ -131,23 +128,134 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.person_outline),
                 ),
-                onChanged: (_) => _sanitize(_nameCtrl, rebuild: true),
+                onChanged: (_) => _sanitizeName(),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _msgCtrl,
-                maxLength: 20,
-                keyboardType: TextInputType.emailAddress,
-                inputFormatters: [_asciiFormatter],
+              const SizedBox(height: 20),
+
+              // ─── 定型文設定 ──────────────────────────────────────
+              Text('ひとこと設定',
+                  style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 12),
+
+              // 状態
+              DropdownButtonFormField<int>(
+                value: _template.statusIndex,
                 decoration: const InputDecoration(
-                  labelText: 'Message',
-                  hintText: 'English only · URL OK',
+                  labelText: '状態',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.emoji_emotions_outlined),
+                ),
+                items: TemplateMessage.statusList
+                    .asMap()
+                    .entries
+                    .map((e) => DropdownMenuItem(
+                        value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(
+                      () => _template = _template.copyWith(statusIndex: v));
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // 趣味カテゴリ
+              DropdownButtonFormField<int>(
+                value: _template.hobbyCategory,
+                decoration: const InputDecoration(
+                  labelText: '趣味カテゴリ',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.interests_outlined),
+                ),
+                items: TemplateMessage.hobbyCategories
+                    .asMap()
+                    .entries
+                    .map((e) => DropdownMenuItem(
+                        value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => _template = _template.copyWith(
+                      hobbyCategory: v, hobbyDetail: 0));
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // 趣味詳細（カテゴリ連動）
+              DropdownButtonFormField<int>(
+                key: ValueKey(_template.hobbyCategory),
+                value: safeDetail,
+                decoration: const InputDecoration(
+                  labelText: '趣味詳細',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.tag_outlined),
+                ),
+                items: detailItems
+                    .asMap()
+                    .entries
+                    .map((e) => DropdownMenuItem(
+                        value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(
+                      () => _template = _template.copyWith(hobbyDetail: v));
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // 締めの一言
+              DropdownButtonFormField<int>(
+                value: _template.phraseIndex,
+                decoration: const InputDecoration(
+                  labelText: '締めの一言',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.chat_bubble_outline),
                 ),
-                onChanged: (_) => _sanitize(_msgCtrl),
+                items: TemplateMessage.phraseList
+                    .asMap()
+                    .entries
+                    .map((e) => DropdownMenuItem(
+                        value: e.key, child: Text(e.value)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(
+                      () => _template = _template.copyWith(phraseIndex: v));
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // プレビュー
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'プレビュー',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).colorScheme.outline),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_template.statusText}  ·  ${_template.hobbyCategoryText}(${_template.hobbyDetailText})  ·  ${_template.phraseText}',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
+
+              // ─── アバターカラー ──────────────────────────────────
               Text('Avatar Color',
                   style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 12),
@@ -166,14 +274,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         color: avatarColors[i],
                         border: selected
                             ? Border.all(
-                                color:
-                                    Theme.of(context).colorScheme.onSurface,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface,
                                 width: 3)
                             : null,
                         boxShadow: selected
                             ? [
                                 BoxShadow(
-                                    color: avatarColors[i].withOpacity(0.5),
+                                    color:
+                                        avatarColors[i].withOpacity(0.5),
                                     blurRadius: 8)
                               ]
                             : null,
@@ -186,6 +296,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   );
                 }),
               ),
+
               if (registeredAt != null) ...[
                 const SizedBox(height: 24),
                 const Divider(),
@@ -198,11 +309,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const SizedBox(width: 8),
                     Text('登録日',
                         style: TextStyle(
-                            color: Theme.of(context).colorScheme.outline)),
+                            color:
+                                Theme.of(context).colorScheme.outline)),
                     const Spacer(),
                     Text(
-                      '${registeredAt.year}/${registeredAt.month.toString().padLeft(2, '0')}/${registeredAt.day.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
+                      fmtDate(registeredAt),
+                      style:
+                          const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -213,14 +326,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 icon: Icon(widget.isFirstLaunch
                     ? Icons.arrow_forward
                     : Icons.check),
-                label: Text(widget.isFirstLaunch ? 'Start' : '保存'),
+                label:
+                    Text(widget.isFirstLaunch ? 'Start' : '保存'),
                 style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(52)),
               ),
               if (widget.isFirstLaunch) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Your name and message are shared with nearby people.\nEnglish only. Anonymous OK.',
+                  'Your name and template message are shared with nearby people.\nEnglish name only. Anonymous OK.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.outline),
                   textAlign: TextAlign.center,

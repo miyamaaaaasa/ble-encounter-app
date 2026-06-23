@@ -12,10 +12,9 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  int _notifHour = 20;
+  int _notifHour = 21;
   int _notifMinute = 0;
   bool _dailyEnabled = true;
-  bool _encounterEnabled = true;
   bool _updateEnabled = true;
   bool _eventEnabled = true;
   String _version = '';
@@ -28,18 +27,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _loadSettings() async {
     final settings = await NotificationService.loadSettings();
-    final info = await PackageInfo.fromPlatform().catchError((_) => PackageInfo(
+    PackageInfo info;
+    try {
+      info = await PackageInfo.fromPlatform();
+    } catch (_) {
+      info = PackageInfo(
           appName: 'すれ違い',
           packageName: '',
-          version: '1.2.0',
-          buildNumber: '4',
-        ));
+          version: '1.3.0',
+          buildNumber: '5');
+    }
     if (!mounted) return;
     setState(() {
       _notifHour = settings.hour;
       _notifMinute = settings.minute;
       _dailyEnabled = settings.dailyEnabled;
-      _encounterEnabled = settings.encounterEnabled;
       _updateEnabled = settings.updateEnabled;
       _eventEnabled = settings.eventEnabled;
       _version = 'v${info.version}';
@@ -47,14 +49,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _pickNotifTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: _notifHour, minute: _notifMinute),
-      helpText: '通知する時刻を選んでください',
-    );
+    TimeOfDay? picked;
+    try {
+      picked = await showTimePicker(
+        context: context,
+        initialTime:
+            TimeOfDay(hour: _notifHour, minute: _notifMinute),
+        helpText: '通知する時刻を選んでください',
+      );
+    } catch (_) {
+      return;
+    }
     if (picked == null || !mounted) return;
     setState(() {
-      _notifHour = picked.hour;
+      _notifHour = picked!.hour;
       _notifMinute = picked.minute;
     });
     if (_dailyEnabled) {
@@ -80,12 +88,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } else {
       await NotificationService.cancelDailyNotification();
     }
-  }
-
-  Future<void> _toggleEncounter(bool value) async {
-    setState(() => _encounterEnabled = value);
-    await NotificationService.setPref(
-        NotificationService.prefEncounterEnabled, value);
   }
 
   Future<void> _toggleUpdate(bool value) async {
@@ -129,11 +131,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   : const Text('アプリ再起動で自動復帰します'),
               trailing: state.isRunning
                   ? OutlinedButton(
-                      onPressed: () => ref.read(appProvider.notifier).stop(),
+                      onPressed: () =>
+                          ref.read(appProvider.notifier).stop(),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.error,
                         side: BorderSide(
-                            color: Theme.of(context).colorScheme.error),
+                            color:
+                                Theme.of(context).colorScheme.error),
                       ),
                       child: const Text('停止'),
                     )
@@ -143,7 +148,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             .read(appProvider.notifier)
                             .requestPermissions();
                         if (ok && mounted) {
-                          await ref.read(appProvider.notifier).start();
+                          await ref
+                              .read(appProvider.notifier)
+                              .start();
                         }
                       },
                       child: const Text('起動'),
@@ -154,25 +161,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             // ─── 通知設定 ─────────────────────────────────────────
             _SectionHeader('通知'),
 
-            // すれ違い通知
-            SwitchListTile(
-              secondary: const Icon(Icons.notifications_active_outlined),
-              title: const Text('すれ違い通知'),
-              subtitle: const Text('すれ違ったときにすぐ通知します'),
-              value: _encounterEnabled,
-              onChanged: _toggleEncounter,
-            ),
-
-            // 本日の結果
+            // 本日の結果（まとめ通知）
             SwitchListTile(
               secondary: const Icon(Icons.summarize_outlined),
               title: const Text('本日の通信結果'),
-              subtitle: const Text('毎日指定した時間にお知らせします'),
+              subtitle:
+                  const Text('毎日指定した時間に1日のまとめをお知らせします'),
               value: _dailyEnabled,
               onChanged: _toggleDaily,
             ),
 
-            // 時刻設定（本日の結果が ON のときのみ有効）
+            // 時刻設定
             AnimatedOpacity(
               opacity: _dailyEnabled ? 1.0 : 0.4,
               duration: const Duration(milliseconds: 200),
@@ -206,6 +205,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             const Divider(indent: 16, endIndent: 16),
 
+            // ─── プライバシー ─────────────────────────────────────
+            _SectionHeader('プライバシー'),
+            const ListTile(
+              leading: Icon(Icons.shield_outlined),
+              title: Text('データの扱い'),
+              subtitle: Text(
+                  'GPS 不使用・BLE のみ・すれ違い時刻は日付単位で記録・データはデバイス内にのみ保存'),
+            ),
+            const ListTile(
+              leading: Icon(Icons.notifications_off_outlined),
+              title: Text('リアルタイム通知は無効'),
+              subtitle: Text(
+                  'すれ違った瞬間の即時通知はプライバシー保護のため送信しません'),
+            ),
+
+            const Divider(indent: 16, endIndent: 16),
+
             // ─── アプリ情報 ───────────────────────────────────────
             _SectionHeader('アプリ情報'),
             ListTile(
@@ -217,12 +233,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     color: Theme.of(context).colorScheme.outline,
                     fontSize: 13),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.shield_outlined),
-              title: const Text('プライバシー'),
-              subtitle: const Text(
-                  'GPS 不使用・BLE のみ・データはデバイス内にのみ保存'),
             ),
 
             const SizedBox(height: 40),

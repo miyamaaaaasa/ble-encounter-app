@@ -7,18 +7,14 @@ import 'package:timezone/timezone.dart' as tz;
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
 
-  static const encounterChannelId = 'encounter';
   static const dailyChannelId = 'daily_result';
   static const _dailyNotifId = 100;
-  static const _encounterNotifId = 101;
 
-  // SharedPreferences キー
-  static const prefHour            = 'notif_hour';
-  static const prefMinute          = 'notif_minute';
-  static const prefDailyEnabled    = 'notif_daily_enabled';
-  static const prefEncounterEnabled = 'notif_encounter_enabled';
-  static const prefUpdateEnabled   = 'notif_update_enabled';
-  static const prefEventEnabled    = 'notif_event_enabled';
+  static const prefHour          = 'notif_hour';
+  static const prefMinute        = 'notif_minute';
+  static const prefDailyEnabled  = 'notif_daily_enabled';
+  static const prefUpdateEnabled = 'notif_update_enabled';
+  static const prefEventEnabled  = 'notif_event_enabled';
 
   static bool _initialized = false;
 
@@ -38,14 +34,6 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin>();
       await androidImpl?.createNotificationChannel(
         const AndroidNotificationChannel(
-          encounterChannelId,
-          'すれ違い通知',
-          description: 'すれ違い相手の通知',
-          importance: Importance.high,
-        ),
-      );
-      await androidImpl?.createNotificationChannel(
-        const AndroidNotificationChannel(
           dailyChannelId,
           '本日の通信結果',
           description: '毎日の通信結果をお知らせします',
@@ -54,36 +42,6 @@ class NotificationService {
       );
     } catch (e) {
       debugPrint('[Notif] init error: $e');
-    }
-  }
-
-  static Future<bool> _isPrefEnabled(String key, {bool def = true}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getBool(key) ?? def;
-    } catch (_) {
-      return def;
-    }
-  }
-
-  static Future<void> showEncounterNotification(String name) async {
-    try {
-      if (!await _isPrefEnabled(prefEncounterEnabled)) return;
-      await _plugin.show(
-        _encounterNotifId,
-        'すれ違いました！',
-        '$name さんとすれ違いました',
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            encounterChannelId,
-            'すれ違い通知',
-            importance: Importance.high,
-            priority: Priority.high,
-          ),
-        ),
-      );
-    } catch (e) {
-      debugPrint('[Notif] encounter: $e');
     }
   }
 
@@ -164,12 +122,11 @@ class NotificationService {
     try {
       final prefs = await SharedPreferences.getInstance();
       return NotifSettings(
-        hour:             prefs.getInt(prefHour) ?? 20,
-        minute:           prefs.getInt(prefMinute) ?? 0,
-        dailyEnabled:     prefs.getBool(prefDailyEnabled) ?? true,
-        encounterEnabled: prefs.getBool(prefEncounterEnabled) ?? true,
-        updateEnabled:    prefs.getBool(prefUpdateEnabled) ?? true,
-        eventEnabled:     prefs.getBool(prefEventEnabled) ?? true,
+        hour:          prefs.getInt(prefHour) ?? 21,
+        minute:        prefs.getInt(prefMinute) ?? 0,
+        dailyEnabled:  prefs.getBool(prefDailyEnabled) ?? true,
+        updateEnabled: prefs.getBool(prefUpdateEnabled) ?? true,
+        eventEnabled:  prefs.getBool(prefEventEnabled) ?? true,
       );
     } catch (_) {
       return NotifSettings();
@@ -181,15 +138,13 @@ class NotifSettings {
   final int hour;
   final int minute;
   final bool dailyEnabled;
-  final bool encounterEnabled;
   final bool updateEnabled;
   final bool eventEnabled;
 
   NotifSettings({
-    this.hour = 20,
+    this.hour = 21,
     this.minute = 0,
     this.dailyEnabled = true,
-    this.encounterEnabled = true,
     this.updateEnabled = true,
     this.eventEnabled = true,
   });

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../core/peer_id.dart';
+import '../models/template_message.dart';
 
 // ─── イベント ─────────────────────────────────────────────────────────────────
 
@@ -11,36 +12,33 @@ class EncounterEvent {
   final String peerId;
   final String macAddress;
   final String name;
-  final String message;
   final int colorIndex;
   final int rssi;
+  final TemplateMessage template;
 
   const EncounterEvent({
     required this.time,
     required this.peerId,
     required this.macAddress,
     required this.name,
-    this.message = '',
     required this.colorIndex,
     required this.rssi,
+    this.template = const TemplateMessage(),
   });
 }
 
 // ─── スキャナー ───────────────────────────────────────────────────────────────
 
 class BleScanner {
-  static const _mfId = 0xFFFF;   // peerId & merged scan response
+  static const _mfId = 0xFFFF;
   static const _magicPeer    = 0xBE;
   static const _magicProfile = 0xBF;
 
   final _controller = StreamController<EncounterEvent>.broadcast();
   StreamSubscription<List<ScanResult>>? _scanSub;
 
-  // 発火済み peerId（重複発火防止。stop() でリセット）
   final _emittedPeers = <String>{};
-
-  // peerId のみ受信済みで name 未取得の端末（scan response 未マージ時の暫定保存）
-  final _partialPeers = <String, _PartialData>{};  // mac → partial
+  final _partialPeers = <String, _PartialData>{};
 
   Stream<EncounterEvent> get encounters => _controller.stream;
 
@@ -88,85 +86,82 @@ class BleScanner {
     final mac = result.device.remoteId.str;
     final mfData = result.advertisementData.manufacturerData;
 
-    // flutter_blue_plus は scan response を primary ad の同じ manufacturer ID エントリに
-    // 結合して届ける。フォーマット:
-    //   [0]      = 0xBE (peerId magic)
-    //   [1..16]  = peerId (16 bytes)
-    //   [17]     = 0xFF  \
-    //   [18]     = 0xFE  / scan response manufacturer ID (0xFEFF) little-endian
-    //   [19]     = 0xBF (profile magic)
-    //   [20]     = colorIndex
-    //   [21..]   = name UTF-8
+    // flutter_blue_plus は scan response を primary ad の同じ manufacturer ID に結合して届ける。
+    // フォーマット: [0xBE][peerId 16B][0xFF][0xFE][0xBF][color][name...][0x00][ts][th][td][tp]
     final payload = mfData[_mfId];
     if (payload == null || payload.length < 17 || payload[0] != _magicPeer) return;
 
-    // peerId を抽出
     final peerId = payload
         .skip(1)
         .take(16)
         .map((b) => b.toRadixString(16).padLeft(2, '0'))
         .join();
-    if (peerId == _myPeerIdHex) return;  // 自分自身は無視
+    if (peerId == _myPeerIdHex) return;
 
-    // プロフィールを抽出（scan response が結合済みかチェック）
     String? name;
-    String message = '';
     int colorIndex = 0;
+    TemplateMessage template = const TemplateMessage();
 
     if (payload.length >= 21 &&
         payload[17] == 0xFF &&
         payload[18] == 0xFE &&
         payload[19] == _magicProfile) {
-      // 結合済みフォーマット: [FF][FE][BF][color][name 0x00 msg] or [FF][FE][BF][color][name (legacy)]
       colorIndex = payload[20] & 0xFF;
       final dataBytes = payload.length > 21 ? payload.sublist(21) : <int>[];
-      // 0x00 セパレータを探す（新フォーマット）
       final sepIdx = dataBytes.indexOf(0x00);
       if (sepIdx >= 0) {
         name = sepIdx > 0
             ? utf8.decode(dataBytes.sublist(0, sepIdx), allowMalformed: true).trim()
             : '';
-        message = sepIdx + 1 < dataBytes.length
-            ? utf8.decode(dataBytes.sublist(sepIdx + 1), allowMalformed: true).trim()
-            : '';
+        // 0x00 の後ろ 4 バイトが定型文インデックス
+        if (dataBytes.length >= sepIdx + 5) {
+          template = TemplateMessage(
+            statusIndex:   dataBytes[sepIdx + 1] & 0xFF,
+            hobbyCategory: dataBytes[sepIdx + 2] & 0xFF,
+            hobbyDetail:   dataBytes[sepIdx + 3] & 0xFF,
+            phraseIndex:   dataBytes[sepIdx + 4] & 0xFF,
+          );
+        }
       } else {
-        // 旧フォーマット（0x00 なし）: 全バイトが name
         name = dataBytes.isNotEmpty
             ? utf8.decode(dataBytes, allowMalformed: true).trim()
             : '';
-        message = '';
       }
-      debugPrint('[BleScanner] FULL mac=$mac id=${peerId.substring(28)} name=$name msg=$message color=$colorIndex rssi=${result.rssi}');
+      debugPrint('[BleScanner] FULL mac=$mac id=${peerId.substring(28)} name=$name');
     } else if (payload.length >= 20 && payload[17] == _magicProfile) {
-      // 結合フォーマット 2: [BF][color][name 0x00 msg] (ID bytes なし)
       colorIndex = payload[18] & 0xFF;
       final dataBytes = payload.length > 19 ? payload.sublist(19) : <int>[];
       final sepIdx = dataBytes.indexOf(0x00);
       if (sepIdx >= 0) {
-        name = sepIdx > 0 ? utf8.decode(dataBytes.sublist(0, sepIdx), allowMalformed: true).trim() : '';
-        message = sepIdx + 1 < dataBytes.length
-            ? utf8.decode(dataBytes.sublist(sepIdx + 1), allowMalformed: true).trim()
+        name = sepIdx > 0
+            ? utf8.decode(dataBytes.sublist(0, sepIdx), allowMalformed: true).trim()
             : '';
+        if (dataBytes.length >= sepIdx + 5) {
+          template = TemplateMessage(
+            statusIndex:   dataBytes[sepIdx + 1] & 0xFF,
+            hobbyCategory: dataBytes[sepIdx + 2] & 0xFF,
+            hobbyDetail:   dataBytes[sepIdx + 3] & 0xFF,
+            phraseIndex:   dataBytes[sepIdx + 4] & 0xFF,
+          );
+        }
       } else {
-        name = dataBytes.isNotEmpty ? utf8.decode(dataBytes, allowMalformed: true).trim() : '';
-        message = '';
+        name = dataBytes.isNotEmpty
+            ? utf8.decode(dataBytes, allowMalformed: true).trim()
+            : '';
       }
       debugPrint('[BleScanner] FULL2 mac=$mac id=${peerId.substring(28)} name=$name');
     } else {
-      // peerId のみ（scan response 未マージ）→ 蓄積して待つ
       _partialPeers[mac] = _PartialData(peerId: peerId, rssi: result.rssi);
-      debugPrint('[BleScanner] peerId_only mac=$mac id=${peerId.substring(28)} rssi=${result.rssi}');
       return;
     }
 
-    // 過去に保存した partial の rssi を使いたい場合のマージ
     final partial = _partialPeers[mac];
     final finalRssi = partial?.rssi ?? result.rssi;
-
-    _tryEmit(peerId, mac, name ?? '', message, colorIndex, finalRssi);
+    _tryEmit(peerId, mac, name ?? '', colorIndex, template, finalRssi);
   }
 
-  void _tryEmit(String peerId, String mac, String name, String message, int colorIndex, int rssi) {
+  void _tryEmit(String peerId, String mac, String name,
+      int colorIndex, TemplateMessage template, int rssi) {
     if (_emittedPeers.contains(peerId)) return;
     if (name.isEmpty) return;
     _emittedPeers.add(peerId);
@@ -176,8 +171,8 @@ class BleScanner {
       peerId: peerId,
       macAddress: mac,
       name: name,
-      message: message,
       colorIndex: colorIndex,
+      template: template,
       rssi: rssi,
     ));
   }

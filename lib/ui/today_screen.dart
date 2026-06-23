@@ -2,18 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart';
-import 'profile_screen.dart' show avatarColors;
-import 'encounter_list_screen.dart' show rssiToStars, encounterLabel, encounterLabelColor;
+import 'encounter_helpers.dart';
+import 'encounter_detail_sheet.dart';
+import 'result_card_screen.dart';
 
 class TodayScreen extends ConsumerWidget {
   const TodayScreen({super.key});
 
   List<EncounterRecord> _todayEncounters(List<EncounterRecord> all) {
-    final today = DateTime.now();
+    final now = DateTime.now();
     return all.where((e) {
-      return e.lastMet.year == today.year &&
-          e.lastMet.month == today.month &&
-          e.lastMet.day == today.day;
+      return e.lastMet.year == now.year &&
+          e.lastMet.month == now.month &&
+          e.lastMet.day == now.day;
     }).toList();
   }
 
@@ -21,6 +22,8 @@ class TodayScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appProvider);
     final today = _todayEncounters(state.encounters);
+    final newCount = today.where((e) => e.firstMetToday).length;
+    final returnCount = today.length - newCount;
     final now = DateTime.now();
     final dateLabel =
         '${now.year}/${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')}';
@@ -62,28 +65,29 @@ class TodayScreen extends ConsumerWidget {
           ],
         ),
 
-        // ─── 今日の大きなカウンター ──────────────────────────────────────
+        // ─── カウンター カード ────────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
             child: Card(
               elevation: 0,
               color: Theme.of(context).colorScheme.primaryContainer,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24)),
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                padding: const EdgeInsets.symmetric(
+                    vertical: 28, horizontal: 24),
                 child: Column(
                   children: [
                     Text(
                       dateLabel,
                       style: TextStyle(
-                        fontSize: 13,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
+                          fontSize: 13,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 400),
                       child: Text(
@@ -92,43 +96,52 @@ class TodayScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 80,
                           fontWeight: FontWeight.w900,
-                          color:
-                              Theme.of(context).colorScheme.onPrimaryContainer,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
                           height: 1,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       '人とすれ違いました',
                       style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color:
-                            Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onPrimaryContainer
-                            .withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '通算 ${state.encounters.length} 人',
-                        style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
                           color: Theme.of(context)
                               .colorScheme
-                              .onPrimaryContainer
-                              .withOpacity(0.7),
+                              .onPrimaryContainer),
+                    ),
+                    const SizedBox(height: 14),
+                    // 新規 / 再遭遇 バッジ
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _StatChip(
+                          label: '初めて',
+                          count: newCount,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
                         ),
-                      ),
+                        const SizedBox(width: 10),
+                        _StatChip(
+                          label: '再会',
+                          count: returnCount,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 10),
+                        _StatChip(
+                          label: '通算',
+                          count: state.encounters.length,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -136,6 +149,29 @@ class TodayScreen extends ConsumerWidget {
             ),
           ),
         ),
+
+        // ─── 結果演出ボタン ──────────────────────────────────────────────
+        if (today.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          ResultCardScreen(encounters: today),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.slideshow_outlined),
+                label: const Text('今日の結果を1人ずつ見る'),
+                style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44)),
+              ),
+            ),
+          ),
 
         // ─── 今日のリスト ────────────────────────────────────────────────
         if (today.isEmpty)
@@ -146,7 +182,8 @@ class TodayScreen extends ConsumerWidget {
               children: [
                 Icon(Icons.explore_outlined,
                     size: 56,
-                    color: Theme.of(context).colorScheme.outlineVariant),
+                    color:
+                        Theme.of(context).colorScheme.outlineVariant),
                 const SizedBox(height: 16),
                 Text(
                   'まだ今日はすれ違いがありません',
@@ -158,7 +195,8 @@ class TodayScreen extends ConsumerWidget {
                 Text(
                   '外出してみましょう！',
                   style: TextStyle(
-                      color: Theme.of(context).colorScheme.outlineVariant,
+                      color:
+                          Theme.of(context).colorScheme.outlineVariant,
                       fontSize: 13),
                 ),
               ],
@@ -166,7 +204,7 @@ class TodayScreen extends ConsumerWidget {
           )
         else ...[
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
             sliver: SliverToBoxAdapter(
               child: Text(
                 '今日出会った人',
@@ -181,7 +219,8 @@ class TodayScreen extends ConsumerWidget {
           ),
           SliverList.builder(
             itemCount: today.length,
-            itemBuilder: (ctx, i) => _TodayTile(encounter: today[i]),
+            itemBuilder: (ctx, i) =>
+                _TodayTile(encounter: today[i]),
           ),
         ],
 
@@ -190,6 +229,44 @@ class TodayScreen extends ConsumerWidget {
     );
   }
 }
+
+// ─── 統計チップ ───────────────────────────────────────────────────────────────
+
+class _StatChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  const _StatChip(
+      {required this.label, required this.count, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: color.withOpacity(0.75)),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$count',
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w800, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── タイル ──────────────────────────────────────────────────────────────────
 
 class _TodayTile extends StatelessWidget {
   final EncounterRecord encounter;
@@ -200,41 +277,48 @@ class _TodayTile extends StatelessWidget {
     final color = avatarColors[encounter.colorIndex % avatarColors.length];
     final initial =
         encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-    final stars = rssiToStars(encounter.rssi);
     final label = encounterLabel(encounter.meetCount);
     final labelColor = encounterLabelColor(encounter.meetCount, context);
+    final tmpl = encounter.template;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Card(
         elevation: 0,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
         color: Theme.of(context).colorScheme.surfaceContainerLow,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: color,
-                child: Text(initial,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => EncounterDetailSheet.show(context, encounter),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: color,
+                  child: Text(
+                    initial,
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(encounter.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 14)),
-                    if (encounter.message.isNotEmpty)
+                        fontSize: 16),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        encounter.message,
+                        encounter.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      Text(
+                        '${tmpl.statusText} · ${tmpl.hobbyCategoryText}',
                         style: TextStyle(
                             fontSize: 12,
                             color: Theme.of(context)
@@ -243,40 +327,26 @@ class _TodayTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${'★' * stars}${'☆' * (5 - stars)}',
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: labelColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    label,
                     style: TextStyle(
-                        fontSize: 10,
-                        color: stars >= 4
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.outline,
-                        letterSpacing: -1),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: labelColor),
                   ),
-                  const SizedBox(height: 2),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: labelColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: labelColor),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

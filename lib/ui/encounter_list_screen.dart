@@ -1,18 +1,39 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart';
-import 'profile_screen.dart' show avatarColors;
+import 'encounter_helpers.dart';
+import 'encounter_detail_sheet.dart';
 
-class EncounterListScreen extends ConsumerWidget {
+enum _Sort { recent, count }
+
+class EncounterListScreen extends ConsumerStatefulWidget {
   const EncounterListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EncounterListScreen> createState() =>
+      _EncounterListScreenState();
+}
+
+class _EncounterListScreenState
+    extends ConsumerState<EncounterListScreen> {
+  _Sort _sort = _Sort.recent;
+
+  List<EncounterRecord> _sorted(List<EncounterRecord> list) {
+    final copy = List<EncounterRecord>.from(list);
+    switch (_sort) {
+      case _Sort.recent:
+        copy.sort((a, b) => b.lastMet.compareTo(a.lastMet));
+      case _Sort.count:
+        copy.sort((a, b) => b.meetCount.compareTo(a.meetCount));
+    }
+    return copy;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(appProvider);
-    final encounters = state.encounters;
+    final encounters = _sorted(state.encounters);
 
     return CustomScrollView(
       slivers: [
@@ -23,11 +44,38 @@ class EncounterListScreen extends ConsumerWidget {
               padding: const EdgeInsets.only(right: 16),
               child: Chip(
                 avatar: const Icon(Icons.people, size: 16),
-                label: Text('累計 ${encounters.length} 人'),
+                label: Text('累計 ${state.encounters.length} 人'),
               ),
             ),
           ],
         ),
+
+        // ─── ソートボタン ────────────────────────────────────────────────
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: SegmentedButton<_Sort>(
+              segments: const [
+                ButtonSegment(
+                  value: _Sort.recent,
+                  icon: Icon(Icons.access_time, size: 16),
+                  label: Text('最近'),
+                ),
+                ButtonSegment(
+                  value: _Sort.count,
+                  icon: Icon(Icons.trending_up, size: 16),
+                  label: Text('遭遇回数'),
+                ),
+              ],
+              selected: {_sort},
+              onSelectionChanged: (s) =>
+                  setState(() => _sort = s.first),
+              style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact),
+            ),
+          ),
+        ),
+
         if (state.errorMessage != null)
           SliverToBoxAdapter(
             child: Padding(
@@ -39,41 +87,15 @@ class EncounterListScreen extends ConsumerWidget {
                   child: Text(
                     state.errorMessage!,
                     style: TextStyle(
-                        color: Theme.of(context).colorScheme.onErrorContainer),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onErrorContainer),
                   ),
                 ),
               ),
             ),
           ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: state.isRunning
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  state.isRunning ? 'スキャン中' : '停止中',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: state.isRunning
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+
         if (encounters.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
@@ -82,13 +104,17 @@ class EncounterListScreen extends ConsumerWidget {
         else
           SliverList.builder(
             itemCount: encounters.length,
-            itemBuilder: (ctx, i) => _EncounterTile(encounter: encounters[i]),
+            itemBuilder: (ctx, i) =>
+                _ZukanTile(encounter: encounters[i]),
           ),
+
         const SliverPadding(padding: EdgeInsets.only(bottom: 32)),
       ],
     );
   }
 }
+
+// ─── 空状態 ──────────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
@@ -104,7 +130,8 @@ class _EmptyState extends StatelessWidget {
         const SizedBox(height: 20),
         Text('まだすれ違いがありません',
             style: TextStyle(
-                color: Theme.of(context).colorScheme.outline, fontSize: 16)),
+                color: Theme.of(context).colorScheme.outline,
+                fontSize: 16)),
         const SizedBox(height: 8),
         Text('外出して、誰かとすれ違ってみよう！',
             style: TextStyle(
@@ -115,101 +142,38 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ─── ヘルパー ─────────────────────────────────────────────────────────────────
+// ─── 図鑑タイル ───────────────────────────────────────────────────────────────
 
-String formatEncounterTime(DateTime dt) {
-  final diff = DateTime.now().difference(dt);
-  if (diff.inHours < 1) return '1時間以内に出会いました';
-  if (diff.inHours < 24) return '今日出会いました';
-  final y = dt.year;
-  final m = dt.month.toString().padLeft(2, '0');
-  final d = dt.day.toString().padLeft(2, '0');
-  return '$y/$m/$d';
-}
-
-String encounterLabel(int meetCount) {
-  if (meetCount >= 50) return '伝説';
-  if (meetCount >= 10) return '常連';
-  if (meetCount >= 5) return 'よく見る';
-  return '見かけた';
-}
-
-Color encounterLabelColor(int meetCount, BuildContext context) {
-  if (meetCount >= 50) return const Color(0xFFFFB300);
-  if (meetCount >= 10) return const Color(0xFFBA68C8);
-  if (meetCount >= 5) return Theme.of(context).colorScheme.tertiary;
-  return Theme.of(context).colorScheme.primary;
-}
-
-int rssiToStars(int rssi) {
-  if (rssi >= -60) return 5;
-  if (rssi >= -70) return 4;
-  if (rssi >= -80) return 3;
-  if (rssi >= -90) return 2;
-  return 1;
-}
-
-final _urlRegex = RegExp(r'https?://\S+', caseSensitive: false);
-
-List<TextSpan> buildUrlSpans(
-    String text, TextStyle base, TextStyle link) {
-  final spans = <TextSpan>[];
-  int last = 0;
-  for (final m in _urlRegex.allMatches(text)) {
-    if (m.start > last) {
-      spans.add(TextSpan(text: text.substring(last, m.start), style: base));
-    }
-    final url = m.group(0)!;
-    spans.add(TextSpan(
-      text: url,
-      style: link,
-      recognizer: TapGestureRecognizer()
-        ..onTap = () async {
-          final uri = Uri.tryParse(url);
-          if (uri == null) return;
-          try {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          } catch (_) {}
-        },
-    ));
-    last = m.end;
-  }
-  if (last < text.length) {
-    spans.add(TextSpan(text: text.substring(last), style: base));
-  }
-  return spans;
-}
-
-// ─── タイル ──────────────────────────────────────────────────────────────────
-
-class _EncounterTile extends StatelessWidget {
+class _ZukanTile extends StatelessWidget {
   final EncounterRecord encounter;
-  const _EncounterTile({required this.encounter});
+  const _ZukanTile({required this.encounter});
 
   @override
   Widget build(BuildContext context) {
     final color = avatarColors[encounter.colorIndex % avatarColors.length];
     final initial =
         encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-    final stars = rssiToStars(encounter.rssi);
     final label = encounterLabel(encounter.meetCount);
     final labelColor = encounterLabelColor(encounter.meetCount, context);
+    final stars = rssiToStars(encounter.rssi);
 
     return InkWell(
-      onTap: () => _showDetail(context),
+      onTap: () => EncounterDetailSheet.show(context, encounter),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             CircleAvatar(
               radius: 24,
               backgroundColor: color,
-              child: Text(initial,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18)),
+              child: Text(
+                initial,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -219,14 +183,17 @@ class _EncounterTile extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(encounter.name,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 15)),
+                        child: Text(
+                          encounter.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 15),
+                        ),
                       ),
+                      // 電波強度
                       Text(
                         '${'★' * stars}${'☆' * (5 - stars)}',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                           color: stars >= 4
                               ? Theme.of(context).colorScheme.primary
                               : Theme.of(context).colorScheme.outline,
@@ -235,28 +202,23 @@ class _EncounterTile extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (encounter.message.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      encounter.message,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Row(
                     children: [
                       Text(
-                        formatEncounterTime(encounter.lastMet),
+                        '初: ${fmtDate(encounter.firstMet)}',
                         style: TextStyle(
                             fontSize: 11,
                             color: Theme.of(context).colorScheme.outline),
                       ),
                       const SizedBox(width: 8),
+                      Text(
+                        '最終: ${fmtDate(encounter.lastMet)}',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.outline),
+                      ),
+                      const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 7, vertical: 2),
@@ -280,126 +242,6 @@ class _EncounterTile extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  void _showDetail(BuildContext context) {
-    final color = avatarColors[encounter.colorIndex % avatarColors.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-    final stars = rssiToStars(encounter.rssi);
-    final label = encounterLabel(encounter.meetCount);
-    final labelColor = encounterLabelColor(encounter.meetCount, context);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        final baseStyle = TextStyle(
-            fontSize: 15,
-            color: Theme.of(ctx).colorScheme.onSurface);
-        final linkStyle = TextStyle(
-            fontSize: 15,
-            color: Theme.of(ctx).colorScheme.primary,
-            decoration: TextDecoration.underline);
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              CircleAvatar(
-                radius: 40,
-                backgroundColor: color,
-                child: Text(initial,
-                    style: const TextStyle(
-                        fontSize: 34,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(height: 16),
-              Text(encounter.name,
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: labelColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(label,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600, color: labelColor)),
-              ),
-              if (encounter.message.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                RichText(
-                  text: TextSpan(
-                      children: buildUrlSpans(
-                          encounter.message, baseStyle, linkStyle)),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _DetailItem(
-                    label: '電波強度',
-                    value: '${'★' * stars}${'☆' * (5 - stars)}',
-                  ),
-                  _DetailItem(
-                    label: '初めて',
-                    value: formatEncounterTime(encounter.firstMet),
-                  ),
-                  _DetailItem(
-                    label: '最近',
-                    value: formatEncounterTime(encounter.lastMet),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _DetailItem extends StatelessWidget {
-  final String label;
-  final String value;
-  const _DetailItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 11,
-                color: Theme.of(context).colorScheme.outline)),
-        const SizedBox(height: 4),
-        Text(value,
-            style:
-                const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-      ],
     );
   }
 }

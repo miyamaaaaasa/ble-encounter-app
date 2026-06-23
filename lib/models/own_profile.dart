@@ -1,54 +1,50 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'template_message.dart';
 
 class OwnProfile {
   final String name;
-  final String message;
   final int colorIndex;
-  final String? iconPath;       // ローカル JPEG パス
-  final DateTime? registeredAt; // 初回登録日
+  final TemplateMessage template;
+  final DateTime? registeredAt;
 
   const OwnProfile({
     required this.name,
-    this.message = '',
     this.colorIndex = 0,
-    this.iconPath,
+    this.template = const TemplateMessage(),
     this.registeredAt,
   });
 
   /// BLE スキャン応答ペイロード。
-  /// フォーマット: [0xBF][colorIdx][name ASCII ≤10 bytes][0x00][message ASCII ≤13 bytes]
-  /// 合計最大 25 bytes (scan response 27 byte 制限内)
+  /// フォーマット: [0xBF][colorIdx][name ASCII ≤10][0x00][status][hobby][detail][phrase]
+  /// 合計最大 17 bytes（27 byte 制限内）
   Uint8List toScanPayload() {
-    // 27 byte 制限 - 2 byte ヘッダ (0xBF + colorIdx) - 1 byte セパレータ = 24 bytes
-    const totalAvail = 24;
-    const nameMax = 10; // ASCII 10 文字
-    final nameBytes = _trimUtf8(utf8.encode(name), nameMax);
-    final msgMax = (totalAvail - nameBytes.length).clamp(0, 14);
-    final msgBytes = _trimUtf8(utf8.encode(message), msgMax);
-
+    const nameMax = 10;
+    final nameBytes = _trimAscii(utf8.encode(name), nameMax);
     final out = BytesBuilder();
     out.addByte(0xBF);
     out.addByte(colorIndex & 0xFF);
     out.add(nameBytes);
-    out.addByte(0x00); // セパレータ
-    out.add(msgBytes);
+    out.addByte(0x00);
+    out.addByte(template.statusIndex & 0xFF);
+    out.addByte(template.hobbyCategory & 0xFF);
+    out.addByte(template.hobbyDetail & 0xFF);
+    out.addByte(template.phraseIndex & 0xFF);
     return out.takeBytes();
   }
 
-  static List<int> _trimUtf8(List<int> bytes, int maxLen) {
+  static List<int> _trimAscii(List<int> bytes, int maxLen) {
     if (bytes.length <= maxLen) return bytes;
-    int len = maxLen;
-    // UTF-8 継続バイト (10xxxxxx) を超えないようにトリム
-    while (len > 0 && (bytes[len] & 0xC0) == 0x80) len--;
-    return bytes.sublist(0, len);
+    return bytes.sublist(0, maxLen);
   }
 
   Map<String, dynamic> toMap() => {
         'n': name,
-        'm': message,
         'c': colorIndex,
-        if (iconPath != null) 'i': iconPath,
+        'ts': template.statusIndex,
+        'th': template.hobbyCategory,
+        'td': template.hobbyDetail,
+        'tp': template.phraseIndex,
         if (registeredAt != null) 'r': registeredAt!.toIso8601String(),
       };
 
@@ -58,28 +54,28 @@ class OwnProfile {
     final m = jsonDecode(json) as Map<String, dynamic>;
     return OwnProfile(
       name: m['n'] as String? ?? '',
-      message: m['m'] as String? ?? '',
       colorIndex: m['c'] as int? ?? 0,
-      iconPath: m['i'] as String?,
-      registeredAt: m['r'] != null
-          ? DateTime.tryParse(m['r'] as String)
-          : null,
+      template: TemplateMessage(
+        statusIndex: m['ts'] as int? ?? 0,
+        hobbyCategory: m['th'] as int? ?? 0,
+        hobbyDetail: m['td'] as int? ?? 0,
+        phraseIndex: m['tp'] as int? ?? 0,
+      ),
+      registeredAt:
+          m['r'] != null ? DateTime.tryParse(m['r'] as String) : null,
     );
   }
 
   OwnProfile copyWith({
     String? name,
-    String? message,
     int? colorIndex,
-    String? iconPath,
+    TemplateMessage? template,
     DateTime? registeredAt,
-    bool clearIcon = false,
   }) =>
       OwnProfile(
         name: name ?? this.name,
-        message: message ?? this.message,
         colorIndex: colorIndex ?? this.colorIndex,
-        iconPath: clearIcon ? null : (iconPath ?? this.iconPath),
+        template: template ?? this.template,
         registeredAt: registeredAt ?? this.registeredAt,
       );
 }
