@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import '../providers/ble_providers.dart';
+import '../providers/ble_providers.dart' show appProvider, notifHourProvider;
 import '../services/notification_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -34,7 +34,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {
       info = PackageInfo(
           appName: 'はじめましてこんにちは', packageName: '',
-          version: '1.5.8', buildNumber: '15');
+          version: '1.5.9', buildNumber: '16');
     }
     if (!mounted) return;
     setState(() {
@@ -68,6 +68,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     await NotificationService.changeHour(hour);
+    ref.read(notifHourProvider.notifier).state = hour; // 今日タブへ即時反映
     if (!mounted) return;
     setState(() => _notifHour = hour);
     final hh = hour.toString().padLeft(2, '0');

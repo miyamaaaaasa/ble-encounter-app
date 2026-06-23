@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/ble_config.dart';
 import '../models/encounter_record.dart';
-import '../providers/ble_providers.dart';
+import '../providers/ble_providers.dart' show appProvider, AppState, notifHourProvider;
 import '../services/notification_service.dart';
 import 'encounter_helpers.dart';
 import 'radar_widget.dart'; // WaveAnimation
@@ -123,10 +123,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   Widget build(BuildContext context) {
     final state       = ref.watch(appProvider);
 
-    // プロフィール初回設定後に通知時刻を再読込（セットアップ画面から戻ったとき用）
+    // プロフィール初回設定後に通知時刻を再読込
     ref.listen<AppState>(appProvider, (prev, next) {
       if ((prev?.ownProfile == null) && next.ownProfile != null) {
         _init();
+      }
+    });
+
+    // 設定画面で時刻が変更されたら即座に反映
+    ref.listen<int>(notifHourProvider, (_, newHour) {
+      if (mounted && _notifHour != newHour) {
+        setState(() => _notifHour = newHour);
+        _startCountdown();
       }
     });
 

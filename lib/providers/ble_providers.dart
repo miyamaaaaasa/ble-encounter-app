@@ -16,6 +16,9 @@ import '../services/scanner.dart';
 import '../services/profile_storage.dart';
 import '../services/notification_service.dart';
 
+// 通知時刻プロバイダー（設定画面 → 今日タブへ即時伝播）
+final notifHourProvider = StateProvider<int>((ref) => 18);
+
 // ─── State ──────────────────────────────────────────────────────────────────
 
 class AppState {
@@ -137,6 +140,7 @@ class AppNotifier extends Notifier<AppState> {
     var encounters     = await _storage.loadEncounters();
     final badges       = await BadgeService.load();
     final notifSettings = await NotificationService.loadSettings();
+    ref.read(notifHourProvider.notifier).state = notifSettings.hour;
 
     // 翌日自動救済: 公開バッチ日付より古い未開封エンカウントを自動解放
     final batchDate = _revealBatchDate(notifSettings.hour);
