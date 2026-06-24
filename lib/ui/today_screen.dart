@@ -30,10 +30,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   Future<void> _init() async {
     final s = await NotificationService.loadSettings();
-    if (mounted) {
-      setState(() => _notifHour = s.hour);
-      _startCountdown();
-    }
+    if (!mounted) return;
+    // ローカル変数とプロバイダーを同時に更新（常に SharedPreferences の値を最優先）
+    ref.read(notifHourProvider.notifier).state = s.hour;
+    setState(() => _notifHour = s.hour);
+    _startCountdown();
   }
 
   void _startCountdown() {

@@ -116,6 +116,12 @@ class NotificationService {
   // ── 日次通知スケジュール ────────────────────────────────────────────────────
 
   static Future<void> scheduleDailyNotification({required int hour}) async {
+    // ★ 時刻を最初に保存。通知スケジュール失敗に関わらず hour は必ず永続化する。
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(prefHour, hour);
+    await prefs.setBool(prefDailyEnabled, true);
+    debugPrint('[Notif] saved hour=$hour to prefs');
+
     try {
       await _plugin.cancel(_dailyNotifId);
 
@@ -125,7 +131,6 @@ class NotificationService {
 
       if (scheduled.isBefore(now)) scheduled = scheduled.add(const Duration(days: 1));
 
-      final prefs = await SharedPreferences.getInstance();
       final sound  = prefs.getBool(prefSoundEnabled) ?? true;
       final vibr   = prefs.getBool(prefVibrationEnabled) ?? true;
 
@@ -147,11 +152,8 @@ class NotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
-
-      await prefs.setInt(prefHour, hour);
-      await prefs.setBool(prefDailyEnabled, true);
     } catch (e) {
-      debugPrint('[Notif] schedule: $e');
+      debugPrint('[Notif] zonedSchedule error: $e');
     }
   }
 
