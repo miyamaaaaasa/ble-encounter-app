@@ -14,12 +14,14 @@ import UserNotifications
     }
 
     GeneratedPluginRegistrant.register(with: self)
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
-    let controller = window?.rootViewController as! FlutterViewController
-    let _ = BleAdvertiserChannel(messenger: controller.binaryMessenger)
-    let _ = GattPlugin(messenger: controller.binaryMessenger)
+    if let controller = window?.rootViewController as? FlutterViewController {
+      let _ = BleAdvertiserChannel(messenger: controller.binaryMessenger)
+      let _ = GattPlugin(messenger: controller.binaryMessenger)
+    }
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    return result
   }
 
   override func userNotificationCenter(
@@ -27,6 +29,10 @@ import UserNotifications
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    completionHandler([.banner, .sound, .badge])
+    if #available(iOS 14.0, *) {
+      completionHandler([.banner, .sound, .badge])
+    } else {
+      completionHandler([.alert, .sound, .badge])
+    }
   }
 }
