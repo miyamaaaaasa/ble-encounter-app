@@ -13,6 +13,7 @@ class EncounterEvent {
   final String macAddress;
   final String name;
   final int colorIndex;
+  final int prefecture;
   final int rssi;
   final TemplateMessage template;
 
@@ -22,6 +23,7 @@ class EncounterEvent {
     required this.macAddress,
     required this.name,
     required this.colorIndex,
+    required this.prefecture,
     required this.rssi,
     this.template = const TemplateMessage(),
   });
@@ -141,22 +143,34 @@ class BleScanner {
     _activePeers[peerId] = DateTime.now();
 
     String? name;
-    int colorIndex = 0;
+    int colorIndex  = 0;
+    int prefecture  = -1;
     TemplateMessage template = const TemplateMessage();
 
     if (payload.length >= 21 &&
         payload[17] == 0xFF &&
         payload[18] == 0xFE &&
         payload[19] == _magicProfile) {
+      // レガシーフォーマット: [0xBE][peerId 16][0xFF][0xFE][0xBF][colorIdx][data...]
       colorIndex = payload[20] & 0xFF;
       final dataBytes = payload.length > 21 ? payload.sublist(21) : <int>[];
       (name, template) = _parseProfileBytes(dataBytes);
       debugPrint('[BleScanner] FULL id=${peerId.substring(28)} name=$name rssi=${result.rssi}dBm');
     } else if (payload.length >= 20 && payload[17] == _magicProfile) {
+      // 新フォーマット: [0xBE][peerId 16][0xBF][colorIdx][prefecture?][name...]
       colorIndex = payload[18] & 0xFF;
-      final dataBytes = payload.length > 19 ? payload.sublist(19) : <int>[];
+      int offset = 19;
+      // 次のバイトが都道府県コード範囲 (0-46) か 0xFF(未設定) なら読み込む
+      if (payload.length > 19) {
+        final pfByte = payload[19] & 0xFF;
+        if (pfByte == 0xFF || pfByte <= 46) {
+          prefecture = pfByte == 0xFF ? -1 : pfByte;
+          offset = 20;
+        }
+      }
+      final dataBytes = payload.length > offset ? payload.sublist(offset) : <int>[];
       (name, template) = _parseProfileBytes(dataBytes);
-      debugPrint('[BleScanner] FULL2 mac=$mac id=${peerId.substring(28)} name=$name');
+      debugPrint('[BleScanner] FULL2 mac=$mac id=${peerId.substring(28)} name=$name pref=$prefecture');
     } else {
       _partialPeers[mac] = _PartialData(peerId: peerId, rssi: result.rssi);
       return;
@@ -164,7 +178,7 @@ class BleScanner {
 
     final partial    = _partialPeers[mac];
     final finalRssi  = partial?.rssi ?? result.rssi;
-    _tryEmit(peerId, mac, name ?? '', colorIndex, template, finalRssi);
+    _tryEmit(peerId, mac, name ?? '', colorIndex, prefecture, template, finalRssi);
   }
 
   (String?, TemplateMessage) _parseProfileBytes(List<int> dataBytes) {
@@ -195,9 +209,8 @@ class BleScanner {
   static int _decodeByte(int b) => b == 0xFF ? -1 : b & 0xFF;
 
   void _tryEmit(String peerId, String mac, String name,
-      int colorIndex, TemplateMessage template, int rssi) {
+      int colorIndex, int prefecture, TemplateMessage template, int rssi) {
     if (name.isEmpty) return;
-    // 同一スキャンセッション内で同一ピアへの重複 emit を防ぐ（爆増バグ対策）
     if (_emittedPeers.contains(peerId)) return;
     _emittedPeers.add(peerId);
     debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name rssi=${rssi}dBm');
@@ -207,6 +220,7 @@ class BleScanner {
       macAddress: mac,
       name: name,
       colorIndex: colorIndex,
+      prefecture: prefecture,
       template: template,
       rssi: rssi,
     ));

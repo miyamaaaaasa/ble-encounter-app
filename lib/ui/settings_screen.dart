@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import '../providers/ble_providers.dart' show appProvider, notifHourProvider;
+import '../core/ble_config.dart';
+import '../providers/ble_providers.dart'
+    show appProvider, scanIntervalProvider;
 import '../services/notification_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -12,13 +14,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  int  _notifHour        = 18;
-  bool _dailyEnabled     = true;
-  bool _updateEnabled    = true;
-  bool _eventEnabled     = true;
-  bool _soundEnabled     = true;
-  bool _vibrationEnabled = true;
-  String _version        = '';
+  bool   _encounterEnabled = true;
+  bool   _updateEnabled    = true;
+  bool   _eventEnabled     = true;
+  bool   _soundEnabled     = true;
+  bool   _vibrationEnabled = true;
+  String _version          = '';
 
   @override
   void initState() {
@@ -33,60 +34,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       info = await PackageInfo.fromPlatform();
     } catch (_) {
       info = PackageInfo(
-          appName: 'はじめましてこんにちは', packageName: '',
-          version: '1.5.12', buildNumber: '19');
+          appName: 'はじめましてこんにちは',
+          packageName: '',
+          version: '1.5.13',
+          buildNumber: '20');
     }
     if (!mounted) return;
     setState(() {
-      _notifHour        = settings.hour;
-      _dailyEnabled     = settings.dailyEnabled;
+      _encounterEnabled = settings.encounterEnabled;
       _updateEnabled    = settings.updateEnabled;
       _eventEnabled     = settings.eventEnabled;
       _soundEnabled     = settings.soundEnabled;
       _vibrationEnabled = settings.vibrationEnabled;
-      _version          = 'beta${info.version}';  // beta表記を強制
+      _version          = 'beta${info.version}';
     });
   }
 
-  // 固定時刻に変更（7日ロックチェック込み）
-  Future<void> _changeHour(int? hour) async {
-    if (hour == null) return;
-
-    final canChange = await NotificationService.canChangeTime();
-    if (!canChange) {
-      final next = await NotificationService.nextAllowedChangeDate();
-      if (!mounted) return;
-      final mm = next?.month.toString().padLeft(2, '0') ?? '--';
-      final dd = next?.day.toString().padLeft(2, '0') ?? '--';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('設定は1週間に1回しか変更できません（次回変更可能日: $mm/$dd）'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    await NotificationService.changeHour(hour);
-    ref.read(notifHourProvider.notifier).state = hour; // 今日タブへ即時反映
-    if (!mounted) return;
-    setState(() => _notifHour = hour);
-    final hh = hour.toString().padLeft(2, '0');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$hh:00 に通知します'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Future<void> _toggleDaily(bool value) async {
-    setState(() => _dailyEnabled = value);
-    if (value) {
-      await NotificationService.scheduleDailyNotification(hour: _notifHour);
-    } else {
-      await NotificationService.cancelDailyNotification();
-    }
+  Future<void> _toggleEncounter(bool value) async {
+    setState(() => _encounterEnabled = value);
+    await NotificationService.setPref(
+        NotificationService.prefEncounterEnabled, value);
+    if (value) await NotificationService.scheduleGateNotifications();
   }
 
   Future<void> _toggleUpdate(bool value) async {
@@ -116,6 +84,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appProvider);
+    final si    = ref.watch(scanIntervalProvider);
 
     return CustomScrollView(
       slivers: [
@@ -143,7 +112,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       onPressed: () =>
                           ref.read(appProvider.notifier).stop(),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.error,
                         side: BorderSide(
                             color: Theme.of(context).colorScheme.error),
                       ),
@@ -161,62 +131,63 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       child: const Text('起動'),
                     ),
             ),
+
+            // ─── 検出タイミング ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.timer_outlined, size: 24),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('検出タイミング',
+                            style: TextStyle(fontSize: 15)),
+                        if (si.needsBatteryWarning)
+                          Text(
+                            '⚡ バッテリー消費が増加します',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .error),
+                          ),
+                      ],
+                    ),
+                  ),
+                  DropdownButton<ScanInterval>(
+                    value: si,
+                    items: ScanInterval.values
+                        .map((v) => DropdownMenuItem(
+                              value: v,
+                              child: Text(v.label,
+                                  style: const TextStyle(fontSize: 13)),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      ref
+                          .read(appProvider.notifier)
+                          .setScanInterval(v);
+                    },
+                  ),
+                ],
+              ),
+            ),
+
             const Divider(indent: 16, endIndent: 16),
 
             // ─── 通知 ─────────────────────────────────────────────────────
             _SectionHeader('通知'),
 
             SwitchListTile(
-              secondary: const Icon(Icons.summarize_outlined),
-              title: const Text('本日の結果通知'),
-              subtitle: const Text('毎日指定時刻に結果をお知らせ'),
-              value: _dailyEnabled,
-              onChanged: _toggleDaily,
-            ),
-
-            // 固定時刻セレクター（0:00 / 9:00 / 12:00 / 18:00）
-            AnimatedOpacity(
-              opacity: _dailyEnabled ? 1.0 : 0.4,
-              duration: const Duration(milliseconds: 200),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.schedule_outlined, size: 24),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('配信時刻',
-                              style: TextStyle(fontSize: 15)),
-                          Text(
-                            '※ 変更は1週間に1回のみ',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    DropdownButton<int>(
-                      value: NotificationService.fixedHours
-                              .contains(_notifHour)
-                          ? _notifHour
-                          : NotificationService.fixedHours.last,
-                      items: NotificationService.fixedHours
-                          .map((h) => DropdownMenuItem(
-                                value: h,
-                                child: Text(
-                                    '${h.toString().padLeft(2, '0')}:00'),
-                              ))
-                          .toList(),
-                      onChanged: _dailyEnabled ? _changeHour : null,
-                    ),
-                  ],
-                ),
-              ),
+              secondary: const Icon(Icons.notifications_outlined),
+              title: const Text('開門通知'),
+              subtitle: const Text('朝9:00 / 昼12:00 / 夜21:00 に通知'),
+              value: _encounterEnabled,
+              onChanged: _toggleEncounter,
             ),
 
             SwitchListTile(
@@ -261,7 +232,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const ListTile(
               leading: Icon(Icons.shield_outlined),
               title: Text('データの扱い'),
-              subtitle: Text('GPS 不使用・BLE のみ・データはデバイス内にのみ保存'),
+              subtitle: Text(
+                  'GPS 不使用・BLE のみ・データはデバイス内にのみ保存'),
             ),
             const ListTile(
               leading: Icon(Icons.lock_outline),

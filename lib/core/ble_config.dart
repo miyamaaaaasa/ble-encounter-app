@@ -3,12 +3,48 @@
 // kDebugBle = false → 本番設定（実機ログ解析で最適化済み）
 const bool kDebugBle = false;
 
-// スキャンサイクル (秒)
-// 実機ログ根拠: 検知レイテンシ 70-160ms → 15s 以上で十分
-// 2分サイクル = 5分近接で51%検知 (旧10分サイクルは26%)
-// バッテリー影響: デューティ比 6.25% → 0.1%/日 未満の増加（無視可）
-const int kScanOnSeconds  = kDebugBle ? 12 : 15;
-const int kScanOffSeconds = kDebugBle ? 48 : 105; // 本番: 2分周期に最適化
+// スキャン ON 秒数（固定）
+const int kScanOnSeconds = kDebugBle ? 12 : 15;
 
 // ゲート制御
 const bool kGateAlwaysOpen = kDebugBle; // デバッグ時は常時開放
+
+// ─── スキャン間隔設定 ──────────────────────────────────────────────────────────
+
+enum ScanInterval {
+  always,  // 常時検出
+  one,     // 1分
+  two,     // 2分（デフォルト）
+  three,   // 3分
+  five,    // 5分
+  ten,     // 10分
+}
+
+extension ScanIntervalX on ScanInterval {
+  String get label => switch (this) {
+    ScanInterval.always => '常時検出',
+    ScanInterval.one    => '1分に1回',
+    ScanInterval.two    => '2分に1回',
+    ScanInterval.three  => '3分に1回',
+    ScanInterval.five   => '5分に1回',
+    ScanInterval.ten    => '10分に1回',
+  };
+
+  bool get needsBatteryWarning =>
+      this == ScanInterval.always || this == ScanInterval.one;
+
+  // OFFサイクル秒数（ON=15秒固定）
+  int get offSeconds => kDebugBle ? 48 : switch (this) {
+    ScanInterval.always => 2,   // ほぼ常時（短時間のみOFF）
+    ScanInterval.one    => 45,  // 1分サイクル
+    ScanInterval.two    => 105, // 2分サイクル（デフォルト）
+    ScanInterval.three  => 165, // 3分サイクル
+    ScanInterval.five   => 285, // 5分サイクル
+    ScanInterval.ten    => 585, // 10分サイクル
+  };
+
+  static const prefKey = 'scan_interval_v1';
+
+  static ScanInterval fromIndex(int i) =>
+      ScanInterval.values.elementAtOrNull(i) ?? ScanInterval.two;
+}

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'encounter_record.dart';
 import '../ui/encounter_helpers.dart';
 
@@ -102,35 +101,72 @@ class TowerFloorDef {
   }
 }
 
-// ─── 水族館 ───────────────────────────────────────────────────────────────────
+// ─── 47都道府県特産品 ─────────────────────────────────────────────────────────
 
 class FishDef {
   final String emoji;
   final String name;
-  final String region; // 由来地域ラベル
+  final String region; // 都道府県名
   const FishDef(this.emoji, this.name, this.region);
 }
 
-const _fishTable = [
-  FishDef('🐟', 'アジ',     '関東'),
-  FishDef('🐡', 'フグ',     '九州'),
-  FishDef('🐠', 'クマノミ', '沖縄'),
-  FishDef('🐙', 'タコ',     '近畿'),
-  FishDef('🦑', 'イカ',     '東北'),
-  FishDef('🦀', 'カニ',     '北海道'),
-  FishDef('🦞', 'ロブスター','北海道'),
-  FishDef('🐬', 'イルカ',   '四国'),
-  FishDef('🦈', 'サメ',     '沖縄'),
-  FishDef('🐳', 'クジラ',   '北海道'),
-  FishDef('🦭', 'アザラシ', '北海道'),
-  FishDef('🦐', 'エビ',     '近畿'),
-  FishDef('🎣', 'タイ',     '四国'),
-  FishDef('🐚', 'サザエ',   '九州'),
+// index = 都道府県コード (0=北海道, 1=青森, ..., 46=沖縄)
+const _prefectureTable = [
+  FishDef('🦀', 'カニ',       '北海道'),  // 0
+  FishDef('🍎', 'りんご',     '青森'),    // 1
+  FishDef('🍜', 'わんこそば', '岩手'),    // 2
+  FishDef('🐮', '牛タン',     '宮城'),    // 3
+  FishDef('🍡', 'きりたんぽ', '秋田'),    // 4
+  FishDef('🍒', 'さくらんぼ', '山形'),    // 5
+  FishDef('🍑', '桃',         '福島'),    // 6
+  FishDef('🫘', '納豆',       '茨城'),    // 7
+  FishDef('🍓', '苺',         '栃木'),    // 8
+  FishDef('🫙', 'こんにゃく', '群馬'),    // 9
+  FishDef('🍠', '芋けんぴ',   '埼玉'),    // 10
+  FishDef('🥜', '落花生',     '千葉'),    // 11
+  FishDef('🍳', 'もんじゃ焼き','東京'),   // 12
+  FishDef('🥟', 'シウマイ',   '神奈川'),  // 13
+  FishDef('🍚', 'コシヒカリ', '新潟'),    // 14
+  FishDef('🦐', '白えび',     '富山'),    // 15
+  FishDef('🦀', '加賀がに',   '石川'),    // 16
+  FishDef('🦀', '越前がに',   '福井'),    // 17
+  FishDef('🍇', 'ぶどう',     '山梨'),    // 18
+  FishDef('🍎', 'りんご',     '長野'),    // 19
+  FishDef('🥩', '飛騨牛',     '岐阜'),    // 20
+  FishDef('🍵', 'お茶',       '静岡'),    // 21
+  FishDef('🍛', '味噌カツ',   '愛知'),    // 22
+  FishDef('🦞', '伊勢えび',   '三重'),    // 23
+  FishDef('🐟', 'ふな寿司',   '滋賀'),    // 24
+  FishDef('🍵', '抹茶',       '京都'),    // 25
+  FishDef('🐙', 'たこ焼き',   '大阪'),    // 26
+  FishDef('🥩', '神戸牛',     '兵庫'),    // 27
+  FishDef('🍊', '柿',         '奈良'),    // 28
+  FishDef('🍊', 'みかん',     '和歌山'),  // 29
+  FishDef('🦀', '松葉がに',   '鳥取'),    // 30
+  FishDef('🍜', '出雲そば',   '島根'),    // 31
+  FishDef('🍑', '白桃',       '岡山'),    // 32
+  FishDef('🦪', '牡蠣',       '広島'),    // 33
+  FishDef('🐡', 'ふぐ',       '山口'),    // 34
+  FishDef('🍋', 'すだち',     '徳島'),    // 35
+  FishDef('🍜', '讃岐うどん', '香川'),    // 36
+  FishDef('🍊', 'みかん',     '愛媛'),    // 37
+  FishDef('🐟', '鰹のたたき', '高知'),    // 38
+  FishDef('🍜', '博多ラーメン','福岡'),   // 39
+  FishDef('🥩', '佐賀牛',     '佐賀'),    // 40
+  FishDef('🍰', 'カステラ',   '長崎'),    // 41
+  FishDef('🐴', '馬刺し',     '熊本'),    // 42
+  FishDef('🍋', 'かぼす',     '大分'),    // 43
+  FishDef('🐓', '地鶏',       '宮崎'),    // 44
+  FishDef('🐷', '黒豚',       '鹿児島'),  // 45
+  FishDef('🌿', 'ゴーヤ',     '沖縄'),    // 46
 ];
 
-FishDef fishForPeer(String peerId, int hobbyCategory) {
-  final idx = (peerId.hashCode.abs() + hobbyCategory * 3) % _fishTable.length;
-  return _fishTable[idx];
+// 都道府県コードが既知ならそれを使い、不明なら peerId ハッシュで決定論的に割り当て
+FishDef fishForPeer(String peerId, int prefecture) {
+  final idx = (prefecture >= 0 && prefecture < 47)
+      ? prefecture
+      : peerId.hashCode.abs() % 47;
+  return _prefectureTable[idx];
 }
 
 class AquariumFish {
@@ -164,7 +200,7 @@ class AquariumFish {
   );
 
   static AquariumFish fromEncounter(EncounterRecord e) {
-    final def = fishForPeer(e.peerId, e.template.hobbyCategory);
+    final def = fishForPeer(e.peerId, e.prefecture);
     return AquariumFish(
       peerId: e.peerId, emoji: def.emoji, name: def.name,
       region: def.region, addedAt: DateTime.now(),

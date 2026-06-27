@@ -63,11 +63,13 @@ class _TowerRpgScreenState extends State<TowerRpgScreen> {
   void _startBattle() {
     if (_party.isEmpty) return;
     final partyHp = _party.fold<int>(0, (s, h) => s + h.maxHp);
-    final enemy   = TowerFloorDef.forFloor(1);
+    // 最高到達フロアの次の階から再開（初回は1階）
+    final startFloor = _maxFloor > 0 ? _maxFloor : 1;
+    final enemy = TowerFloorDef.forFloor(startFloor);
     _stateNotifier.value = _TowerState(
-      floor: 1, partyHp: partyHp, partyMaxHp: partyHp,
+      floor: startFloor, partyHp: partyHp, partyMaxHp: partyHp,
       enemyHp: enemy.hp, enemyMaxHp: enemy.hp, enemyName: enemy.name,
-      log: ['⚔️ 1階の ${enemy.name} に挑戦！'],
+      log: ['⚔️ ${startFloor}階の ${enemy.name} に挑戦！'],
     );
   }
 

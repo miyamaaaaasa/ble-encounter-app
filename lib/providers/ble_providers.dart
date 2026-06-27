@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/ble_config.dart';
 import '../core/peer_id.dart';
 import '../models/app_badge.dart';
@@ -16,8 +17,8 @@ import '../services/scanner.dart';
 import '../services/profile_storage.dart';
 import '../services/notification_service.dart';
 
-// 通知時刻プロバイダー（設定画面 → 今日タブへ即時伝播）
-final notifHourProvider = StateProvider<int>((ref) => 18);
+// スキャン間隔プロバイダー（設定画面 → サイクルへ即時反映）
+final scanIntervalProvider = StateProvider<ScanInterval>((ref) => ScanInterval.two);
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -72,15 +73,14 @@ class AppNotifier extends Notifier<AppState> {
   final _storage    = ProfileStorage();
   final _rng        = Random();
 
-  // peerId → 最後に notification を schedule した時刻（12時間制限）
   final _notifScheduled = <String, DateTime>{};
   bool _userStopped = false;
 
-  // 間欠スキャンサイクル制御（実機最適化: 15秒ON / 105秒OFF）
   bool   _cycleActive    = false;
-  bool   _cycleOnActive  = false; // _doCycleOn並列実行防止フラグ
-  bool   _starting       = false; // start() 二重呼び出し防止フラグ
+  bool   _cycleOnActive  = false;
+  bool   _starting       = false;
   Timer? _cycleTimer;
+  ScanInterval _scanInterval = ScanInterval.two;
 
   StreamSubscription<EncounterEvent>?        _encounterSub;
   StreamSubscription<String>?                _departureSub;
@@ -123,33 +123,35 @@ class AppNotifier extends Notifier<AppState> {
     }
   }
 
-  // 通知時刻に応じた「現在の公開バッチ日付」を返す
-  // _notifHour==0: 昨日（0:00設定時は今日の出会いを翌日に公開）
-  // それ以外: 今日
-  static DateTime _revealBatchDate(int notifHour) {
-    final now = DateTime.now();
-    if (notifHour == 0) {
-      final y = now.subtract(const Duration(days: 1));
-      return DateTime(y.year, y.month, y.day);
-    }
-    return DateTime(now.year, now.month, now.day);
+  // エンカウント時刻 → 開門時刻（どの「ゲート」に属するか）
+  static DateTime gateTimeFor(DateTime t) {
+    if (t.hour < 9)  return DateTime(t.year, t.month, t.day, 9);
+    if (t.hour < 12) return DateTime(t.year, t.month, t.day, 12);
+    if (t.hour < 21) return DateTime(t.year, t.month, t.day, 21);
+    // 21:00以降 → 翌日9:00
+    final next = t.add(const Duration(days: 1));
+    return DateTime(next.year, next.month, next.day, 9);
   }
 
   Future<void> _loadData() async {
-    final profile      = await _storage.loadOwnProfile();
-    var encounters     = await _storage.loadEncounters();
-    final badges       = await BadgeService.load();
-    final notifSettings = await NotificationService.loadSettings();
-    ref.read(notifHourProvider.notifier).state = notifSettings.hour;
+    final profile   = await _storage.loadOwnProfile();
+    var encounters  = await _storage.loadEncounters();
+    final badges    = await BadgeService.load();
 
-    // 翌日自動救済: 公開バッチ日付より古い未開封エンカウントを自動解放
-    final batchDate = _revealBatchDate(notifSettings.hour);
+    // スキャン間隔を復元
+    final prefs = await SharedPreferences.getInstance();
+    final savedInterval = prefs.getInt(ScanIntervalX.prefKey) ?? ScanInterval.two.index;
+    _scanInterval = ScanIntervalX.fromIndex(savedInterval);
+    ref.read(scanIntervalProvider.notifier).state = _scanInterval;
+
+    // 自動救済: ゲート時刻が過去になった未開封エンカウントを解放
+    final now = DateTime.now();
     final hasOldUnrevealed = encounters.any(
-      (e) => !e.isRevealed && e.lastMet.isBefore(batchDate),
+      (e) => !e.isRevealed && gateTimeFor(e.lastMet).isBefore(now),
     );
     if (hasOldUnrevealed) {
       encounters = encounters.map((e) {
-        if (!e.isRevealed && e.lastMet.isBefore(batchDate)) return e.reveal();
+        if (!e.isRevealed && gateTimeFor(e.lastMet).isBefore(now)) return e.reveal();
         return e;
       }).toList();
       await _storage.saveEncounters(encounters);
@@ -242,14 +244,9 @@ class AppNotifier extends Notifier<AppState> {
       _starting = false; // isRunning=true になったのでロック解放
       debugPrint('[App] cycle started peerId=${PeerId.hex}');
 
-      _startCycle(); // 間欠駆動開始（最適化済みインターバル）
+      _startCycle();
 
-      final notifSettings = await NotificationService.loadSettings();
-      if (notifSettings.dailyEnabled) {
-        await NotificationService.scheduleDailyNotification(
-          hour: notifSettings.hour,
-        );
-      }
+      await NotificationService.scheduleGateNotifications();
     } catch (e) {
       debugPrint('[App] start error: $e');
       state = state.copyWith(isRunning: false, errorMessage: '起動エラー: $e');
@@ -309,8 +306,9 @@ class AppNotifier extends Notifier<AppState> {
     try { await _advertiser.stopAdvertise(); } catch (e) {
       debugPrint('[Cycle] advertise stop error: $e');
     }
-    debugPrint('[Cycle] BLE OFF — ${kScanOffSeconds}s スリープ (debug=$kDebugBle)');
-    _cycleTimer = Timer(Duration(seconds: kScanOffSeconds), _doCycleOn);
+    final offSecs = _scanInterval.offSeconds;
+    debugPrint('[Cycle] BLE OFF — ${offSecs}s スリープ (debug=$kDebugBle)');
+    _cycleTimer = Timer(Duration(seconds: offSecs), _doCycleOn);
   }
 
   // ─── Stop ────────────────────────────────────────────────────────────────
@@ -344,15 +342,11 @@ class AppNotifier extends Notifier<AppState> {
     state = state.copyWith(newlyEarnedBadges: []);
   }
 
-  // 結果演出完了時: 公開バッチ日付の unrevealed を一斉に解放 → バッジチェック
+  // 結果演出完了時: ゲート時刻が過去の unrevealed を一斉に解放 → バッジチェック
   Future<void> revealToday() async {
-    final settings  = await NotificationService.loadSettings();
-    final batchDate = _revealBatchDate(settings.hour);
+    final now = DateTime.now();
     final list = state.encounters.map((e) {
-      final sameDay = e.lastMet.year == batchDate.year &&
-                      e.lastMet.month == batchDate.month &&
-                      e.lastMet.day == batchDate.day;
-      if (sameDay && !e.isRevealed) return e.reveal();
+      if (!e.isRevealed && gateTimeFor(e.lastMet).isBefore(now)) return e.reveal();
       return e;
     }).toList();
 
@@ -382,13 +376,14 @@ class AppNotifier extends Notifier<AppState> {
       peerId:     event.peerId,
       name:       event.name,
       colorIndex: event.colorIndex,
+      prefecture: event.prefecture,
       template:   event.template,
       rssi:       event.rssi,
     );
     debugPrint('[App] encountered: ${event.name}');
   }
 
-  // 切断イベント → ランダム 10〜60分後に通知スケジュール
+  // 切断イベント → ランダム 10〜30分後に通知スケジュール
   Future<void> _onDeparture(String peerId) async {
     final last = _notifScheduled[peerId];
     final now  = DateTime.now();
@@ -398,20 +393,27 @@ class AppNotifier extends Notifier<AppState> {
     }
     _notifScheduled[peerId] = now;
 
-    final delayMin = _rng.nextInt(51) + 10;
-    final settings = await NotificationService.loadSettings();
+    final delayMin = _rng.nextInt(21) + 10; // 10〜30分
     await NotificationService.scheduleEncounterNotification(
       peerId:       peerId,
       delayMinutes: delayMin,
-      revealHour:   settings.hour,
     );
     debugPrint('[Departure] scheduled notif in ${delayMin}min for ${peerId.substring(28)}');
+  }
+
+  Future<void> setScanInterval(ScanInterval interval) async {
+    _scanInterval = interval;
+    ref.read(scanIntervalProvider.notifier).state = interval;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(ScanIntervalX.prefKey, interval.index);
+    debugPrint('[App] scanInterval → ${interval.label}');
   }
 
   Future<void> _upsertEncounter({
     required String peerId,
     required String name,
     required int colorIndex,
+    required int prefecture,
     required TemplateMessage template,
     required int rssi,
   }) async {
@@ -421,13 +423,13 @@ class AppNotifier extends Notifier<AppState> {
 
     if (idx >= 0) {
       final existing = list.removeAt(idx);
-      // 同日すれ違い済み → meetCount は変えずにメタ情報のみ更新（カウント爆増防止）
       final newMeetCount =
           existing.metToday ? existing.meetCount : existing.meetCount + 1;
       list.insert(0, EncounterRecord(
         peerId:     existing.peerId,
         name:       name,
         colorIndex: existing.colorIndex,
+        prefecture: prefecture != -1 ? prefecture : existing.prefecture,
         firstMet:   existing.firstMet,
         lastMet:    now,
         meetCount:  newMeetCount,
@@ -440,6 +442,7 @@ class AppNotifier extends Notifier<AppState> {
         peerId:     peerId,
         name:       name,
         colorIndex: colorIndex,
+        prefecture: prefecture,
         firstMet:   now,
         lastMet:    now,
         meetCount:  1,
@@ -453,7 +456,6 @@ class AppNotifier extends Notifier<AppState> {
     await _storage.saveEncounters(trimmed);
   }
 
-  @override
   void dispose() {
     _stopCycle();
     _btStateSub?.cancel();

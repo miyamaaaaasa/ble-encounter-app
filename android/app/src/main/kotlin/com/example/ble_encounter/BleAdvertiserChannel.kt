@@ -65,23 +65,25 @@ class BleAdvertiserChannel(private val context: Context) {
             .setIncludeTxPowerLevel(false)
             .build()
 
-        // Scan response: [0xBE][peerId 16bytes][0xBF][colorIdx][name ASCII ≤8bytes]
-        // profilePayload format: [0xBF][colorIdx][name ASCII ≤10][0x00][template 4bytes]
-        val colorIdx = profilePayload.getOrElse(1) { 0.toByte() }
+        // Scan response: [0xBE][peerId 16bytes][0xBF][colorIdx][prefecture 1byte][name ASCII ≤7bytes]
+        // profilePayload format: [0xBF][colorIdx][prefecture][name ASCII ≤9][0x00][template 4bytes]
+        val colorIdx   = profilePayload.getOrElse(1) { 0.toByte() }
+        val prefecture = profilePayload.getOrElse(2) { 0xFF.toByte() }
         var nameLen = 0
-        for (j in 2 until profilePayload.size) {
+        for (j in 3 until profilePayload.size) {
             if (profilePayload[j] == 0x00.toByte()) break
-            if (nameLen >= 8) break
+            if (nameLen >= 7) break
             nameLen++
         }
 
-        val peerProfilePayload = ByteArray(19 + nameLen)
+        val peerProfilePayload = ByteArray(20 + nameLen)
         peerProfilePayload[0] = magicPeer
         System.arraycopy(peerId, 0, peerProfilePayload, 1, minOf(16, peerId.size))
         peerProfilePayload[17] = 0xBF.toByte()
         peerProfilePayload[18] = colorIdx
+        peerProfilePayload[19] = prefecture
         if (nameLen > 0) {
-            System.arraycopy(profilePayload, 2, peerProfilePayload, 19, nameLen)
+            System.arraycopy(profilePayload, 3, peerProfilePayload, 20, nameLen)
         }
 
         val scanResponse = AdvertiseData.Builder()

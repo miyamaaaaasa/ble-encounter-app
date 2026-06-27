@@ -4,11 +4,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/own_profile.dart';
 import '../models/template_message.dart';
 import '../providers/ble_providers.dart';
-import '../services/notification_service.dart';
 import 'encounter_helpers.dart';
 
 final _asciiFormatter =
     FilteringTextInputFormatter.allow(RegExp(r'[\x20-\x7E]'));
+
+const _prefectureNames = [
+  '北海道', '青森', '岩手', '宮城', '秋田', '山形', '福島',
+  '茨城', '栃木', '群馬', '埼玉', '千葉', '東京', '神奈川',
+  '新潟', '富山', '石川', '福井', '山梨', '長野',
+  '岐阜', '静岡', '愛知', '三重',
+  '滋賀', '京都', '大阪', '兵庫', '奈良', '和歌山',
+  '鳥取', '島根', '岡山', '広島', '山口',
+  '徳島', '香川', '愛媛', '高知',
+  '福岡', '佐賀', '長崎', '熊本', '大分', '宮崎', '鹿児島', '沖縄',
+];
 
 String _stripNonAscii(String s) =>
     s.replaceAll(RegExp(r'[^\x20-\x7E]'), '');
@@ -25,8 +35,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _nameCtrl;
   late int _colorIndex;
   late TemplateMessage _template;
-  // 初回セットアップ専用: 通知（開門）時刻。null のままだと保存不可。
-  int? _initialHour;
+  int _prefecture = -1; // 出身地（都道府県コード）
 
   @override
   void initState() {
@@ -35,6 +44,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _nameCtrl = TextEditingController(text: profile?.name ?? '');
     _colorIndex = profile?.colorIndex ?? 0;
     _template = profile?.template ?? const TemplateMessage();
+    _prefecture = profile?.prefecture ?? -1;
   }
 
   @override
@@ -63,24 +73,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
       return;
     }
-    // 初回セットアップ: 通知時刻が未選択なら保存不可
-    if (widget.isFirstLaunch && _initialHour == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('夜の開門時刻を選択してください')),
-      );
-      return;
-    }
     final existing = ref.read(appProvider).ownProfile;
-    // 初回セットアップ時: 時刻を先に確定させる（saveOwnProfile が start() を
-    // 呼ぶ前に正しい hour が SharedPreferences に書き込まれている必要がある）
-    if (widget.isFirstLaunch && _initialHour != null) {
-      await NotificationService.setInitialHour(_initialHour!);
-      ref.read(notifHourProvider.notifier).state = _initialHour!; // 今日タブへ即時反映
-    }
     await ref.read(appProvider.notifier).saveOwnProfile(
           OwnProfile(
             name: name,
             colorIndex: _colorIndex,
+            prefecture: _prefecture,
             template: _template,
             registeredAt: existing?.registeredAt,
           ),
@@ -227,6 +225,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               if (_template.hobbyCategory != -1) const SizedBox(height: 12),
 
+              // 出身地（都道府県）
+              DropdownButtonFormField<int>(
+                value: _prefecture,
+                decoration: const InputDecoration(
+                  labelText: '出身地（任意）',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.place_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem(value: -1, child: Text('未設定')),
+                  ..._prefectureNames.asMap().entries.map((e) =>
+                      DropdownMenuItem(value: e.key, child: Text(e.value))),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => _prefecture = v);
+                },
+              ),
+              const SizedBox(height: 12),
+
               // 締めの一言
               DropdownButtonFormField<int>(
                 value: _template.phraseIndex,
@@ -320,57 +338,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   );
                 }),
               ),
-
-              // ─── 初回セットアップ: 開門時刻（必須）────────────────────────
-              if (widget.isFirstLaunch) ...[
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(Icons.lock_clock_outlined, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '夜の開門・通知時刻 ※必須',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: _initialHour == null
-                                  ? Theme.of(context).colorScheme.error
-                                  : null,
-                            ),
-                          ),
-                          Text(
-                            '今日すれ違った人を確認できる時刻です（設定後は1週間変更不可）',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    DropdownButton<int>(
-                      value: _initialHour,
-                      hint: const Text('未選択'),
-                      items: NotificationService.fixedHours
-                          .map((h) => DropdownMenuItem(
-                                value: h,
-                                child: Text(
-                                    '${h.toString().padLeft(2, '0')}:00'),
-                              ))
-                          .toList(),
-                      onChanged: (v) =>
-                          setState(() => _initialHour = v),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-              ],
 
               if (registeredAt != null) ...[
                 const SizedBox(height: 24),

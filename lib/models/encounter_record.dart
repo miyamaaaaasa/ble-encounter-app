@@ -5,6 +5,7 @@ class EncounterRecord {
   final String peerId;
   final String name;
   final int colorIndex;
+  final int prefecture; // 0-46 = 都道府県コード, -1 = 未設定
   final DateTime firstMet;
   final DateTime lastMet;
   final int meetCount;
@@ -21,6 +22,7 @@ class EncounterRecord {
     required this.lastMet,
     required this.meetCount,
     required this.rssi,
+    this.prefecture = -1,
     this.template = const TemplateMessage(),
     this.isRevealed = false,
   });
@@ -43,18 +45,19 @@ class EncounterRecord {
     required DateTime lastMet,
     required int rssi,
     String? name,
+    int? prefecture,
     TemplateMessage? template,
   }) =>
       EncounterRecord(
         peerId: peerId,
         name: name ?? this.name,
         colorIndex: colorIndex,
+        prefecture: prefecture ?? this.prefecture,
         firstMet: firstMet,
         lastMet: lastMet,
         meetCount: meetCount + 1,
         rssi: rssi,
         template: template ?? this.template,
-        // 今日すでに開封済みなら保持。昨日以前の revealed は今日の再遭遇でリセット
         isRevealed: isRevealed && metToday,
       );
 
@@ -63,6 +66,7 @@ class EncounterRecord {
         peerId: peerId,
         name: name,
         colorIndex: colorIndex,
+        prefecture: prefecture,
         firstMet: firstMet,
         lastMet: lastMet,
         meetCount: meetCount,
@@ -75,6 +79,7 @@ class EncounterRecord {
         'peerId': peerId,
         'name': name,
         'colorIndex': colorIndex,
+        'pf': prefecture,
         'firstMet': firstMet.toIso8601String(),
         'lastMet': lastMet.toIso8601String(),
         'meetCount': meetCount,
@@ -90,6 +95,7 @@ class EncounterRecord {
         peerId: m['peerId'] as String,
         name: m['name'] as String? ?? '????',
         colorIndex: m['colorIndex'] as int? ?? 0,
+        prefecture: m['pf'] as int? ?? -1,
         firstMet: DateTime.parse(m['firstMet'] as String),
         lastMet: DateTime.parse(m['lastMet'] as String),
         meetCount: m['meetCount'] as int? ?? 1,

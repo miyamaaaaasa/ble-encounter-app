@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -10,25 +10,22 @@ class NotificationService {
   static const dailyChannelId     = 'daily_result';
   static const eventChannelId     = 'event_info';
   static const encounterChannelId = 'encounter_detect';
-  static const _dailyNotifId      = 100;
 
-  static const prefHour             = 'notif_hour';
-  static const prefDailyEnabled     = 'notif_daily_enabled';
+  static const _gateNotifBase = 100;
+
+  static const prefEncounterEnabled = 'notif_encounter_enabled';
   static const prefUpdateEnabled    = 'notif_update_enabled';
   static const prefEventEnabled     = 'notif_event_enabled';
   static const prefSoundEnabled     = 'notif_sound_enabled';
   static const prefVibrationEnabled = 'notif_vibration_enabled';
-  static const prefLastTimeChange   = 'last_time_change_date';
 
-  // 選択可能な固定時刻（チート防止のため4択のみ）
-  static const fixedHours = [0, 9, 12, 18];
+  // 3開門時刻（固定: 朝9時, 昼12時, 夜21時）
+  static const gateHours = [9, 12, 21];
 
   static bool _initialized = false;
 
-  // 日次通知タップ時に呼ばれるコールバック（HomeScreen が登録）
   static void Function()? onDailyNotificationTap;
 
-  // UTC フォールバックを完全廃止。常に Asia/Tokyo を使う。
   static tz.Location _location() {
     try { return tz.local; } catch (_) {}
     try { return tz.getLocation('Asia/Tokyo'); } catch (_) {}
@@ -46,8 +43,8 @@ class NotificationService {
       await _plugin.initialize(
         const InitializationSettings(android: android),
         onDidReceiveNotificationResponse: (response) {
-          // 日次通知タップ → 今日タブへ
-          if (response.id == _dailyNotifId) {
+          final id = response.id ?? -1;
+          if (id >= _gateNotifBase && id < _gateNotifBase + 25) {
             onDailyNotificationTap?.call();
           }
         },
@@ -57,8 +54,8 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin>();
       await androidImpl?.createNotificationChannel(
         const AndroidNotificationChannel(
-          dailyChannelId, '本日の通信結果',
-          description: '毎日の通信結果をお知らせします',
+          dailyChannelId, '開門通知',
+          description: '朝・昼・夜の開門時刻をお知らせします',
           importance: Importance.defaultImportance,
         ),
       );
@@ -83,129 +80,72 @@ class NotificationService {
     }
   }
 
-  // ── 時刻変更の7日ロック ─────────────────────────────────────────────────────
-
-  static Future<bool> canChangeTime() async {
+  // 朝・昼・夜ゲート通知（3回/日）
+  static Future<void> scheduleGateNotifications() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final s = prefs.getString(prefLastTimeChange);
-      if (s == null) return true;
-      final last = DateTime.parse(s);
-      return DateTime.now().difference(last).inHours >= 168;
-    } catch (_) {
-      return true;
-    }
-  }
+      final sound = prefs.getBool(prefSoundEnabled) ?? true;
+      final vibr  = prefs.getBool(prefVibrationEnabled) ?? true;
+      final loc   = _location();
+      final now   = tz.TZDateTime.now(loc);
 
-  static Future<DateTime?> nextAllowedChangeDate() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final s = prefs.getString(prefLastTimeChange);
-      if (s == null) return null;
-      return DateTime.parse(s).add(const Duration(days: 7));
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Future<void> _recordTimeChange() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(prefLastTimeChange, DateTime.now().toIso8601String());
-  }
-
-  // ── 日次通知スケジュール ────────────────────────────────────────────────────
-
-  static Future<void> scheduleDailyNotification({required int hour}) async {
-    // ★ 時刻を最初に保存。通知スケジュール失敗に関わらず hour は必ず永続化する。
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(prefHour, hour);
-    await prefs.setBool(prefDailyEnabled, true);
-    debugPrint('[Notif] saved hour=$hour to prefs');
-
-    try {
-      await _plugin.cancel(_dailyNotifId);
-
-      final loc       = _location();
-      final now       = tz.TZDateTime.now(loc);
-      var   scheduled = tz.TZDateTime(loc, now.year, now.month, now.day, hour);
-
-      if (scheduled.isBefore(now)) scheduled = scheduled.add(const Duration(days: 1));
-
-      final sound  = prefs.getBool(prefSoundEnabled) ?? true;
-      final vibr   = prefs.getBool(prefVibrationEnabled) ?? true;
-
-      await _plugin.zonedSchedule(
-        _dailyNotifId,
-        '本日の通信結果',
-        '今日のすれ違い通信結果をご確認ください',
-        scheduled,
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            dailyChannelId, '本日の通信結果',
-            importance: Importance.defaultImportance,
-            playSound: sound,
-            enableVibration: vibr,
+      for (final hour in gateHours) {
+        var scheduled = tz.TZDateTime(loc, now.year, now.month, now.day, hour);
+        if (scheduled.isBefore(now)) {
+          scheduled = scheduled.add(const Duration(days: 1));
+        }
+        await _plugin.zonedSchedule(
+          _gateNotifBase + hour,
+          _gateTitle(hour),
+          '今日のすれ違い通信結果をご確認ください',
+          scheduled,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              dailyChannelId, '開門通知',
+              importance: Importance.defaultImportance,
+              playSound: sound,
+              enableVibration: vibr,
+            ),
           ),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.time,
-      );
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: DateTimeComponents.time,
+        );
+      }
+      debugPrint('[Notif] gate notifications scheduled');
     } catch (e) {
-      debugPrint('[Notif] zonedSchedule error: $e');
+      debugPrint('[Notif] scheduleGateNotifications error: $e');
     }
   }
 
-  // 初回セットアップ専用: 7日ロックを発動させずに時刻を設定する
-  static Future<void> setInitialHour(int hour) async {
-    await scheduleDailyNotification(hour: hour);
-    // _recordTimeChange() は呼ばない → ロックカウントを開始しない
-  }
+  static String _gateTitle(int hour) => switch (hour) {
+    9  => '朝の開門 🌅',
+    12 => '昼の開門 ☀️',
+    21 => '夜の開門 🌙',
+    _  => '開門通知',
+  };
 
-  // 時刻変更（7日ロックチェック済みで呼ぶこと）
-  static Future<void> changeHour(int hour) async {
-    await _recordTimeChange();
-    await scheduleDailyNotification(hour: hour);
-  }
-
-  static Future<void> cancelDailyNotification() async {
-    try {
-      await _plugin.cancel(_dailyNotifId);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(prefDailyEnabled, false);
-    } catch (e) {
-      debugPrint('[Notif] cancel: $e');
-    }
-  }
-
-  static Future<void> setPref(String key, bool value) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(key, value);
-    } catch (e) {
-      debugPrint('[Notif] setPref: $e');
-    }
-  }
-
-  // すれ違い検知通知（切断後 delayMinutes 後に届く・バイブなし）
+  // すれ違い検知通知（切断後 delayMinutes 後）
   static Future<void> scheduleEncounterNotification({
     required String peerId,
     required int delayMinutes,
-    required int revealHour,
   }) async {
     try {
-      final notifId = peerId.hashCode.abs() % 200 + 300;
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool(prefEncounterEnabled) ?? true)) return;
 
-      final now         = tz.TZDateTime.now(_location());
-      final scheduledAt = now.add(Duration(minutes: delayMinutes));
-      final hh = revealHour.toString().padLeft(2, '0');
+      final notifId = peerId.hashCode.abs() % 200 + 300;
+      final now     = tz.TZDateTime.now(_location());
+      final at      = now.add(Duration(minutes: delayMinutes));
+      final nextH   = _nextGateHour();
+      final hh      = nextH.toString().padLeft(2, '0');
 
       await _plugin.zonedSchedule(
         notifId,
         'すれ違いを検知しました',
-        '誰かとすれ違いました。$hh:00 に誰かを確認できます',
-        scheduledAt,
+        '誰かとすれ違いました。$hh:00 に確認できます',
+        at,
         const NotificationDetails(
           android: AndroidNotificationDetails(
             encounterChannelId, 'すれ違い検知',
@@ -223,23 +163,26 @@ class NotificationService {
     }
   }
 
-  // イベント通知（サーバー/FCM から呼ばれる想定）
+  static int _nextGateHour() {
+    final h = DateTime.now().hour;
+    if (h < 9)  return 9;
+    if (h < 12) return 12;
+    if (h < 21) return 21;
+    return 9;
+  }
+
   static Future<void> showEventNotification({
     required String title,
     required String body,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final eventEnabled = prefs.getBool(prefEventEnabled) ?? true;
-      if (!eventEnabled) return;
-
+      if (!(prefs.getBool(prefEventEnabled) ?? true)) return;
       final sound = prefs.getBool(prefSoundEnabled) ?? true;
       final vibr  = prefs.getBool(prefVibrationEnabled) ?? true;
 
       await _plugin.show(
-        200,
-        title,
-        body,
+        200, title, body,
         NotificationDetails(
           android: AndroidNotificationDetails(
             eventChannelId, 'イベント・お知らせ',
@@ -254,12 +197,20 @@ class NotificationService {
     }
   }
 
+  static Future<void> setPref(String key, bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (e) {
+      debugPrint('[Notif] setPref: $e');
+    }
+  }
+
   static Future<NotifSettings> loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       return NotifSettings(
-        hour:             prefs.getInt(prefHour) ?? 18,
-        dailyEnabled:     prefs.getBool(prefDailyEnabled) ?? true,
+        encounterEnabled: prefs.getBool(prefEncounterEnabled) ?? true,
         updateEnabled:    prefs.getBool(prefUpdateEnabled) ?? true,
         eventEnabled:     prefs.getBool(prefEventEnabled) ?? true,
         soundEnabled:     prefs.getBool(prefSoundEnabled) ?? true,
@@ -272,19 +223,17 @@ class NotificationService {
 }
 
 class NotifSettings {
-  final int hour;
-  final bool dailyEnabled;
+  final bool encounterEnabled;
   final bool updateEnabled;
   final bool eventEnabled;
   final bool soundEnabled;
   final bool vibrationEnabled;
 
   NotifSettings({
-    this.hour = 18,
-    this.dailyEnabled = true,
-    this.updateEnabled = true,
-    this.eventEnabled = true,
-    this.soundEnabled = true,
+    this.encounterEnabled = true,
+    this.updateEnabled    = true,
+    this.eventEnabled     = true,
+    this.soundEnabled     = true,
     this.vibrationEnabled = true,
   });
 }
