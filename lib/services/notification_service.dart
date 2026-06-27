@@ -40,8 +40,13 @@ class NotificationService {
       try { tz.setLocalLocation(tz.getLocation('Asia/Tokyo')); } catch (_) {}
 
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const ios = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
       await _plugin.initialize(
-        const InitializationSettings(android: android),
+        const InitializationSettings(android: android, iOS: ios),
         onDidReceiveNotificationResponse: (response) {
           final id = response.id ?? -1;
           if (id >= _gateNotifBase && id < _gateNotifBase + 25) {
@@ -106,6 +111,11 @@ class NotificationService {
               playSound: sound,
               enableVibration: vibr,
             ),
+            iOS: DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: sound,
+            ),
           ),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
@@ -146,12 +156,17 @@ class NotificationService {
         'すれ違いを検知しました',
         '誰かとすれ違いました。$hh:00 に確認できます',
         at,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
+        NotificationDetails(
+          android: const AndroidNotificationDetails(
             encounterChannelId, 'すれ違い検知',
             importance: Importance.low,
             playSound: false,
             enableVibration: false,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: false,
+            presentSound: false,
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -189,6 +204,11 @@ class NotificationService {
             importance: Importance.high,
             playSound: sound,
             enableVibration: vibr,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: sound,
           ),
         ),
       );

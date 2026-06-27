@@ -20,7 +20,7 @@
 
 ---
 
-### [未対応] TASK-001: BleAdvertiserChannel.swift の新規作成
+### [完了] TASK-001: BleAdvertiserChannel.swift の新規作成
 
 **優先度**: 🔴 最高（これがないとアプリ起動時クラッシュ）  
 **対象バージョン**: v1.2.0 → v1.5.13対応に必須  
@@ -54,7 +54,7 @@
 
 ---
 
-### [未対応] TASK-002: AppDelegate.swift の修正
+### [完了] TASK-002: AppDelegate.swift の修正
 
 **優先度**: 🔴 最高（TASK-001と同時に実施）  
 **対象バージョン**: v1.5.13
@@ -106,7 +106,7 @@ import UserNotifications
 
 ---
 
-### [未対応] TASK-003: Info.plist の通知権限追記
+### [完了] TASK-003: Info.plist の通知権限追記
 
 **優先度**: 🟡 高  
 **対象バージョン**: v1.5.13
@@ -162,7 +162,7 @@ Runner.xcworkspace → Runner target → Signing & Capabilities
 
 ---
 
-### [未対応] TASK-005: notification_service.dart に iOS 通知対応を追加
+### [完了] TASK-005: notification_service.dart に iOS 通知対応を追加
 
 **優先度**: 🟡 高  
 **対象バージョン**: v1.5.13
@@ -241,7 +241,7 @@ cd ios && pod install && cd ..
 
 ---
 
-### [未対応] TASK-007: GattPlugin.swift のスタブ作成（後回し可）
+### [完了] TASK-007: GattPlugin.swift のスタブ作成（後回し可）
 
 **優先度**: 🟢 低（BLEスキャン動作確認後に実施）  
 **対象バージョン**: v1.5.x

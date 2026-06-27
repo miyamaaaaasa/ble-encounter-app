@@ -6,10 +6,13 @@
 	<string>すれ違い通信のためにBluetoothを使用します</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>すれ違い通信のためにBluetoothを使用します</string>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>すれ違い通知のためにお知らせを送信します</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
 		<string>bluetooth-peripheral</string>
+		<string>fetch</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
