@@ -193,13 +193,17 @@ class AppNotifier extends Notifier<AppState> {
   // ─── Permissions ─────────────────────────────────────────────────────────
 
   Future<bool> requestPermissions() async {
-    final statuses = await [
+    // iOS: bluetoothScan/Advertise/Connect は NSBluetoothAlwaysUsageDescription にマッピングされる
+    // Android: 個別権限が必要
+    final permissions = [
       Permission.bluetoothScan,
       Permission.bluetoothAdvertise,
       Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
+      if (defaultTargetPlatform != TargetPlatform.iOS) Permission.locationWhenInUse,
       Permission.notification,
-    ].request();
+    ];
+
+    final statuses = await permissions.request();
 
     final denied = statuses.entries
         .where((e) => e.value.isDenied || e.value.isPermanentlyDenied)

@@ -5,6 +5,10 @@ import UserNotifications
 @main
 @objc class AppDelegate: FlutterAppDelegate {
 
+  // Strong references prevent ARC from deallocating channels
+  private var bleAdvertiserChannel: BleAdvertiserChannel?
+  private var gattPlugin: GattPlugin?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -17,8 +21,8 @@ import UserNotifications
     let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
     if let controller = window?.rootViewController as? FlutterViewController {
-      let _ = BleAdvertiserChannel(messenger: controller.binaryMessenger)
-      let _ = GattPlugin(messenger: controller.binaryMessenger)
+      bleAdvertiserChannel = BleAdvertiserChannel(messenger: controller.binaryMessenger)
+      gattPlugin = GattPlugin(messenger: controller.binaryMessenger)
     }
 
     return result
