@@ -57,7 +57,8 @@ class BleAdvertiserChannel: NSObject, CBPeripheralManagerDelegate {
             CBPeripheralManagerOptionRestoreIdentifierKey: BleAdvertiserChannel.restoreIdentifier,
             CBPeripheralManagerOptionShowPowerAlertKey: false
         ]
-        peripheralManager = CBPeripheralManager(delegate: self, queue: DispatchQueue.global(qos: .background), options: options)
+        // nil queue = main thread; Flutter result callbacks must run on main thread
+        peripheralManager = CBPeripheralManager(delegate: self, queue: nil, options: options)
     }
 
     private func stopAdvertise() {
