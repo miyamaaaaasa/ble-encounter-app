@@ -137,7 +137,7 @@ import UserNotifications
 
 ---
 
-### [未対応] TASK-004: XcodeのCapabilitiesでBackground Modes設定
+### [完了] TASK-004: XcodeのCapabilitiesでBackground Modes設定
 
 **優先度**: 🔴 最高（GUIでやる必要あり）  
 **対象バージョン**: 全バージョン共通
@@ -220,7 +220,7 @@ NotificationDetails(
 
 ---
 
-### [未対応] TASK-006: Dart側 flutter pub get & pod install でv1.5.13の依存関係を更新
+### [完了] TASK-006: Dart側 flutter pub get & pod install でv1.5.13の依存関係を更新
 
 **優先度**: 🟠 中（環境準備）  
 **対象バージョン**: v1.5.13
