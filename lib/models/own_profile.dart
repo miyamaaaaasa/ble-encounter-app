@@ -18,10 +18,10 @@ class OwnProfile {
   });
 
   /// BLE スキャン応答ペイロード。
-  /// フォーマット: [0xBF][colorIdx][prefecture+1 or 0xFF][name ASCII ≤9][0x00][status][hobby][detail][phrase]
-  /// 合計最大 17 bytes（27 byte 制限内）
-  Uint8List toScanPayload() {
-    const nameMax = 9; // prefecture byte追加のため1減
+  /// フォーマット: [0xBF][colorIdx][prefecture or 0xFF][name ASCII ≤9][0x00][status][hobby][detail][phrase][badgeLevel]
+  /// 合計最大 18 bytes（27 byte 制限内）
+  Uint8List toScanPayload({int badgeLevel = 0}) {
+    const nameMax = 9;
     final nameBytes = _trimAscii(utf8.encode(name), nameMax);
     final out = BytesBuilder();
     out.addByte(0xBF);
@@ -33,6 +33,7 @@ class OwnProfile {
     out.addByte(template.hobbyCategory == -1 ? 0xFF : template.hobbyCategory & 0xFF);
     out.addByte(template.hobbyDetail   == -1 ? 0xFF : template.hobbyDetail   & 0xFF);
     out.addByte(template.phraseIndex   == -1 ? 0xFF : template.phraseIndex   & 0xFF);
+    out.addByte(badgeLevel & 0xFF);
     return out.takeBytes();
   }
 
@@ -54,22 +55,22 @@ class OwnProfile {
 
   String toStorageJson() => jsonEncode(toMap());
 
-  static OwnProfile fromStorageJson(String json) {
-    final m = jsonDecode(json) as Map<String, dynamic>;
-    return OwnProfile(
-      name: m['n'] as String? ?? '',
-      colorIndex: m['c'] as int? ?? 0,
-      prefecture: m['pf'] as int? ?? -1,
-      template: TemplateMessage(
-        statusIndex: m['ts'] as int? ?? 0,
-        hobbyCategory: m['th'] as int? ?? 0,
-        hobbyDetail: m['td'] as int? ?? 0,
-        phraseIndex: m['tp'] as int? ?? 0,
-      ),
-      registeredAt:
-          m['r'] != null ? DateTime.tryParse(m['r'] as String) : null,
-    );
-  }
+  static OwnProfile fromMap(Map<String, dynamic> m) => OwnProfile(
+        name: m['n'] as String? ?? '',
+        colorIndex: m['c'] as int? ?? 0,
+        prefecture: m['pf'] as int? ?? -1,
+        template: TemplateMessage(
+          statusIndex: m['ts'] as int? ?? 0,
+          hobbyCategory: m['th'] as int? ?? 0,
+          hobbyDetail: m['td'] as int? ?? 0,
+          phraseIndex: m['tp'] as int? ?? 0,
+        ),
+        registeredAt:
+            m['r'] != null ? DateTime.tryParse(m['r'] as String) : null,
+      );
+
+  static OwnProfile fromStorageJson(String json) =>
+      fromMap(jsonDecode(json) as Map<String, dynamic>);
 
   OwnProfile copyWith({
     String? name,

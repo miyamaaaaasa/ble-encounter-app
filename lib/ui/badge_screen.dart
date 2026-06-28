@@ -44,7 +44,7 @@ class BadgeScreen extends ConsumerWidget {
                         color: Theme.of(context).colorScheme.outline,
                         fontSize: 16)),
                 const SizedBox(height: 8),
-                Text('累計100人とすれ違うと最初のバッジが届きます',
+                Text('プロフィールを設定するとスタートバッジが届きます',
                     style: TextStyle(
                         color: Theme.of(context).colorScheme.outlineVariant,
                         fontSize: 13)),

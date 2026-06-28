@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/app_badge.dart';
 import '../models/encounter_record.dart';
 import 'encounter_helpers.dart';
 
@@ -135,6 +136,13 @@ class EncounterDetailSheet extends StatelessWidget {
                     label: '最後に会った日',
                     date: fmtDate(encounter.lastMet),
                   ),
+                  if (encounter.peerBadgeLevel > 0) ...[
+                    const SizedBox(height: 6),
+                    _DateRow(
+                      label: '相手のバッジ',
+                      date: AppBadge.badgeLevelLabel(encounter.peerBadgeLevel),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                 ],
               ),

@@ -5,6 +5,18 @@ allprojects {
     }
 }
 
+// file_picker 8.x uses compileSdk 34 but flutter_plugin_android_lifecycle 2.0.35 requires 36
+// Force all library plugins to use compileSdk 36
+subprojects {
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.library")) {
+            extensions.findByType<com.android.build.gradle.LibraryExtension>()?.apply {
+                compileSdk = 36
+            }
+        }
+    }
+}
+
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")

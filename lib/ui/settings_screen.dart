@@ -4,6 +4,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/ble_config.dart';
 import '../providers/ble_providers.dart'
     show appProvider, scanIntervalProvider;
+import '../services/data_export_service.dart';
+import '../services/game_storage.dart';
 import '../services/notification_service.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -15,6 +17,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool   _encounterEnabled = true;
+  bool   _bannerEnabled    = true;
   bool   _updateEnabled    = true;
   bool   _eventEnabled     = true;
   bool   _soundEnabled     = true;
@@ -36,12 +39,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       info = PackageInfo(
           appName: 'はじめましてこんにちは',
           packageName: '',
-          version: '1.5.13',
-          buildNumber: '20');
+          version: '1.5.14',
+          buildNumber: '21');
     }
     if (!mounted) return;
     setState(() {
       _encounterEnabled = settings.encounterEnabled;
+      _bannerEnabled    = settings.bannerEnabled;
       _updateEnabled    = settings.updateEnabled;
       _eventEnabled     = settings.eventEnabled;
       _soundEnabled     = settings.soundEnabled;
@@ -55,6 +59,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await NotificationService.setPref(
         NotificationService.prefEncounterEnabled, value);
     if (value) await NotificationService.scheduleGateNotifications();
+  }
+
+  Future<void> _toggleBanner(bool value) async {
+    setState(() => _bannerEnabled = value);
+    await NotificationService.setPref(
+        NotificationService.prefBannerEnabled, value);
   }
 
   Future<void> _toggleUpdate(bool value) async {
@@ -79,6 +89,66 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _vibrationEnabled = value);
     await NotificationService.setPref(
         NotificationService.prefVibrationEnabled, value);
+  }
+
+  Future<void> _onExport() async {
+    final state = ref.read(appProvider);
+    try {
+      final gameData = await GameStorage.load();
+      await DataExportService.exportAll(
+        profile:    state.ownProfile,
+        encounters: state.encounters,
+        badges:     state.badges,
+        gameData:   gameData,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('エクスポートエラー: $e')),
+      );
+    }
+  }
+
+  Future<void> _onImport() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('データをインポート'),
+        content: const Text(
+          '現在のデータはバックアップファイルで上書きされます。\n続けますか？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('インポート'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      final result = await DataExportService.importFromFile();
+      if (result == null) return;
+      await ref.read(appProvider.notifier).applyImport(result);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'インポート完了: ${result.encounters.length}人 / ${result.badges.length}個のバッジ',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('インポートエラー: $e')),
+      );
+    }
   }
 
   @override
@@ -145,6 +215,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       children: [
                         const Text('検出タイミング',
                             style: TextStyle(fontSize: 15)),
+                        Text(
+                          '時計に同期 — 全デバイスが同じタイミングで通信',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(context).colorScheme.outline),
+                        ),
                         if (si.needsBatteryWarning)
                           Text(
                             '⚡ バッテリー消費が増加します',
@@ -191,6 +267,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
 
             SwitchListTile(
+              secondary: const Icon(Icons.radar_outlined),
+              title: const Text('すれ違い検知通知'),
+              subtitle: const Text('すれ違い後10〜30分でこっそり通知'),
+              value: _bannerEnabled,
+              onChanged: _toggleBanner,
+            ),
+
+            SwitchListTile(
               secondary: const Icon(Icons.campaign_outlined),
               title: const Text('イベント通知'),
               subtitle: const Text('特別イベント・お知らせを受信'),
@@ -223,6 +307,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('バイブレーション'),
               value: _vibrationEnabled,
               onChanged: _toggleVibration,
+            ),
+
+            const Divider(indent: 16, endIndent: 16),
+
+            // ─── データ管理 ───────────────────────────────────────────────
+            _SectionHeader('データ管理'),
+
+            ListTile(
+              leading: const Icon(Icons.upload_outlined),
+              title: const Text('データをエクスポート'),
+              subtitle: const Text(
+                  'プロフィール・すれ違い記録・バッジ・ゲームデータをバックアップ'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _onExport,
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: const Text('データをインポート'),
+              subtitle: const Text('バックアップファイルからデータを復元（上書き）'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _onImport,
             ),
 
             const Divider(indent: 16, endIndent: 16),

@@ -13,6 +13,8 @@ import '../models/encounter_record.dart';
 import '../models/template_message.dart';
 import '../services/advertiser.dart';
 import '../services/badge_service.dart';
+import '../services/data_export_service.dart';
+import '../services/game_storage.dart';
 import '../services/scanner.dart';
 import '../services/profile_storage.dart';
 import '../services/notification_service.dart';
@@ -187,9 +189,18 @@ class AppNotifier extends Notifier<AppState> {
         : profile.copyWith(registeredAt: DateTime.now());
     await _storage.saveOwnProfile(withDate);
     state = state.copyWith(ownProfile: withDate, errorMessage: null);
+
+    // 初回プロフィール設定時にスタートバッジを付与
+    if (isFirstSave) {
+      final updatedBadges = await BadgeService.awardStartBadge(state.badges);
+      final newlyEarned = updatedBadges
+          .where((b) => !state.badges.any((ob) => ob.id == b.id))
+          .toList();
+      state = state.copyWith(badges: updatedBadges, newlyEarnedBadges: newlyEarned);
+      debugPrint('[App] start badge awarded');
+    }
+
     if (state.isRunning) {
-      // プロフィール更新時: 次の ON サイクルで自動的に新プロフィールを使用
-      // (強制再起動は不要)
       debugPrint('[App] profile updated, next cycle will use new payload');
     } else if (isFirstSave) {
       await _autoStart();
@@ -278,6 +289,20 @@ class AppNotifier extends Notifier<AppState> {
     _cycleTimer = null;
   }
 
+  // デバイスの時計に同期した「次の境界時刻まで」の待機時間を計算
+  // 例: 間隔5分なら 0,5,10,15... 分の時刻に揃える
+  Duration _timeToNextBoundary() {
+    if (_scanInterval == ScanInterval.always) return const Duration(seconds: 2);
+    if (kDebugBle) return Duration(seconds: _scanInterval.offSeconds);
+    final now = DateTime.now();
+    final intervalSec = _scanInterval.intervalMinutes * 60;
+    final currentSec = now.minute * 60 + now.second;
+    final elapsed = currentSec % intervalSec;
+    final remaining = intervalSec - elapsed;
+    // 残り2秒未満なら次の境界まで待つ（即時再起動を防ぐ）
+    return Duration(seconds: remaining < 2 ? intervalSec : remaining);
+  }
+
   Future<void> _doCycleOn() async {
     if (!_cycleActive || _userStopped) return;
     // 並列実行防止: 前回の _doCycleOn がまだ async 処理中なら skip
@@ -296,9 +321,10 @@ class AppNotifier extends Notifier<AppState> {
         _cycleTimer = Timer(const Duration(seconds: 30), _doCycleOn);
         return;
       }
-      await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload());
+      final badgeLevel = AppBadge.badgeLevelFrom(state.badges);
+      await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload(badgeLevel: badgeLevel));
       await _scanner.start();
-      debugPrint('[Cycle] BLE ON — ${kScanOnSeconds}s (debug=$kDebugBle)');
+      debugPrint('[Cycle] BLE ON — ${kScanOnSeconds}s badge=$badgeLevel');
     } catch (e) {
       debugPrint('[Cycle] ON error: $e');
     } finally {
@@ -315,9 +341,9 @@ class AppNotifier extends Notifier<AppState> {
     try { await _advertiser.stopAdvertise(); } catch (e) {
       debugPrint('[Cycle] advertise stop error: $e');
     }
-    final offSecs = _scanInterval.offSeconds;
-    debugPrint('[Cycle] BLE OFF — ${offSecs}s スリープ (debug=$kDebugBle)');
-    _cycleTimer = Timer(Duration(seconds: offSecs), _doCycleOn);
+    final delay = _timeToNextBoundary();
+    debugPrint('[Cycle] BLE OFF — 次の境界まで${delay.inSeconds}s待機 (interval=${_scanInterval.label})');
+    _cycleTimer = Timer(delay, _doCycleOn);
   }
 
   // ─── Stop ────────────────────────────────────────────────────────────────
@@ -382,12 +408,13 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> _onEncounter(EncounterEvent event) async {
     debugPrint('[Encounter] name=${event.name} id=${event.peerId.substring(28)}');
     await _upsertEncounter(
-      peerId:     event.peerId,
-      name:       event.name,
-      colorIndex: event.colorIndex,
-      prefecture: event.prefecture,
-      template:   event.template,
-      rssi:       event.rssi,
+      peerId:         event.peerId,
+      name:           event.name,
+      colorIndex:     event.colorIndex,
+      prefecture:     event.prefecture,
+      template:       event.template,
+      rssi:           event.rssi,
+      peerBadgeLevel: event.peerBadgeLevel,
     );
     debugPrint('[App] encountered: ${event.name}');
   }
@@ -425,6 +452,7 @@ class AppNotifier extends Notifier<AppState> {
     required int prefecture,
     required TemplateMessage template,
     required int rssi,
+    int peerBadgeLevel = 0,
   }) async {
     final now  = DateTime.now();
     final list = List<EncounterRecord>.from(state.encounters);
@@ -435,34 +463,53 @@ class AppNotifier extends Notifier<AppState> {
       final newMeetCount =
           existing.metToday ? existing.meetCount : existing.meetCount + 1;
       list.insert(0, EncounterRecord(
-        peerId:     existing.peerId,
-        name:       name,
-        colorIndex: existing.colorIndex,
-        prefecture: prefecture != -1 ? prefecture : existing.prefecture,
-        firstMet:   existing.firstMet,
-        lastMet:    now,
-        meetCount:  newMeetCount,
-        rssi:       rssi,
-        template:   template,
-        isRevealed: existing.isRevealed && existing.metToday,
+        peerId:         existing.peerId,
+        name:           name,
+        colorIndex:     existing.colorIndex,
+        prefecture:     prefecture != -1 ? prefecture : existing.prefecture,
+        firstMet:       existing.firstMet,
+        lastMet:        now,
+        meetCount:      newMeetCount,
+        rssi:           rssi,
+        template:       template,
+        isRevealed:     existing.isRevealed && existing.metToday,
+        peerBadgeLevel: peerBadgeLevel > 0 ? peerBadgeLevel : existing.peerBadgeLevel,
       ));
     } else {
       list.insert(0, EncounterRecord(
-        peerId:     peerId,
-        name:       name,
-        colorIndex: colorIndex,
-        prefecture: prefecture,
-        firstMet:   now,
-        lastMet:    now,
-        meetCount:  1,
-        rssi:       rssi,
-        template:   template,
+        peerId:         peerId,
+        name:           name,
+        colorIndex:     colorIndex,
+        prefecture:     prefecture,
+        firstMet:       now,
+        lastMet:        now,
+        meetCount:      1,
+        rssi:           rssi,
+        template:       template,
+        peerBadgeLevel: peerBadgeLevel,
       ));
     }
 
     final trimmed = list.take(500).toList();
     state = state.copyWith(encounters: trimmed, hasNewEncounter: true);
     await _storage.saveEncounters(trimmed);
+  }
+
+  // データのインポート（機種変移行用）
+  Future<void> applyImport(ImportResult result) async {
+    if (result.profile != null) {
+      await _storage.saveOwnProfile(result.profile!);
+    }
+    await _storage.saveEncounters(result.encounters);
+    await BadgeService.save(result.badges);
+    await GameStorage.save(result.gameData);
+
+    state = state.copyWith(
+      ownProfile: result.profile ?? state.ownProfile,
+      encounters: result.encounters,
+      badges:     result.badges,
+    );
+    debugPrint('[App] import applied: ${result.encounters.length} encounters, ${result.badges.length} badges');
   }
 
   void dispose() {

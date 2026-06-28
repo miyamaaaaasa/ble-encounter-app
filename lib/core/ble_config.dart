@@ -33,7 +33,17 @@ extension ScanIntervalX on ScanInterval {
   bool get needsBatteryWarning =>
       this == ScanInterval.always || this == ScanInterval.one;
 
-  // OFFサイクル秒数（ON=15秒固定）
+  // 間隔（分単位、always は 0）
+  int get intervalMinutes => switch (this) {
+    ScanInterval.always => 0,
+    ScanInterval.one    => 1,
+    ScanInterval.two    => 2,
+    ScanInterval.three  => 3,
+    ScanInterval.five   => 5,
+    ScanInterval.ten    => 10,
+  };
+
+  // OFFサイクル秒数（ON=15秒固定、フォールバック用・クロック同期が使えない場合）
   int get offSeconds => kDebugBle ? 48 : switch (this) {
     ScanInterval.always => 2,   // ほぼ常時（短時間のみOFF）
     ScanInterval.one    => 45,  // 1分サイクル

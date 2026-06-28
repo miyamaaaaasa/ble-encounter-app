@@ -18,6 +18,8 @@ class NotificationService {
   static const prefEventEnabled     = 'notif_event_enabled';
   static const prefSoundEnabled     = 'notif_sound_enabled';
   static const prefVibrationEnabled = 'notif_vibration_enabled';
+  // すれ違い検知通知（バナーと同タイミング、10-30分後）
+  static const prefBannerEnabled    = 'notif_banner_enabled';
 
   // 3開門時刻（固定: 朝9時, 昼12時, 夜21時）
   static const gateHours = [9, 12, 21];
@@ -143,7 +145,7 @@ class NotificationService {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (!(prefs.getBool(prefEncounterEnabled) ?? true)) return;
+      if (!(prefs.getBool(prefBannerEnabled) ?? true)) return;
 
       final notifId = peerId.hashCode.abs() % 200 + 300;
       final now     = tz.TZDateTime.now(_location());
@@ -235,6 +237,7 @@ class NotificationService {
         eventEnabled:     prefs.getBool(prefEventEnabled) ?? true,
         soundEnabled:     prefs.getBool(prefSoundEnabled) ?? true,
         vibrationEnabled: prefs.getBool(prefVibrationEnabled) ?? true,
+        bannerEnabled:    prefs.getBool(prefBannerEnabled) ?? true,
       );
     } catch (_) {
       return NotifSettings();
@@ -248,6 +251,7 @@ class NotifSettings {
   final bool eventEnabled;
   final bool soundEnabled;
   final bool vibrationEnabled;
+  final bool bannerEnabled;
 
   NotifSettings({
     this.encounterEnabled = true,
@@ -255,5 +259,6 @@ class NotifSettings {
     this.eventEnabled     = true,
     this.soundEnabled     = true,
     this.vibrationEnabled = true,
+    this.bannerEnabled    = true,
   });
 }

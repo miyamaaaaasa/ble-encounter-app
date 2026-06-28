@@ -16,6 +16,7 @@ class EncounterEvent {
   final int prefecture;
   final int rssi;
   final TemplateMessage template;
+  final int peerBadgeLevel;
 
   const EncounterEvent({
     required this.time,
@@ -26,6 +27,7 @@ class EncounterEvent {
     required this.prefecture,
     required this.rssi,
     this.template = const TemplateMessage(),
+    this.peerBadgeLevel = 0,
   });
 }
 
@@ -147,6 +149,7 @@ class BleScanner {
     int prefecture  = -1;
     TemplateMessage template = const TemplateMessage();
 
+    int peerBadgeLevel = 0;
     if (payload.length >= 21 &&
         payload[17] == 0xFF &&
         payload[18] == 0xFE &&
@@ -154,7 +157,7 @@ class BleScanner {
       // レガシーフォーマット: [0xBE][peerId 16][0xFF][0xFE][0xBF][colorIdx][data...]
       colorIndex = payload[20] & 0xFF;
       final dataBytes = payload.length > 21 ? payload.sublist(21) : <int>[];
-      (name, template) = _parseProfileBytes(dataBytes);
+      (name, template, peerBadgeLevel) = _parseProfileBytes(dataBytes);
       debugPrint('[BleScanner] FULL id=${peerId.substring(28)} name=$name rssi=${result.rssi}dBm');
     } else if (payload.length >= 20 && payload[17] == _magicProfile) {
       // 新フォーマット: [0xBE][peerId 16][0xBF][colorIdx][prefecture?][name...]
@@ -169,8 +172,8 @@ class BleScanner {
         }
       }
       final dataBytes = payload.length > offset ? payload.sublist(offset) : <int>[];
-      (name, template) = _parseProfileBytes(dataBytes);
-      debugPrint('[BleScanner] FULL2 mac=$mac id=${peerId.substring(28)} name=$name pref=$prefecture');
+      (name, template, peerBadgeLevel) = _parseProfileBytes(dataBytes);
+      debugPrint('[BleScanner] FULL2 mac=$mac id=${peerId.substring(28)} name=$name pref=$prefecture badge=$peerBadgeLevel');
     } else {
       _partialPeers[mac] = _PartialData(peerId: peerId, rssi: result.rssi);
       return;
@@ -178,13 +181,14 @@ class BleScanner {
 
     final partial    = _partialPeers[mac];
     final finalRssi  = partial?.rssi ?? result.rssi;
-    _tryEmit(peerId, mac, name ?? '', colorIndex, prefecture, template, finalRssi);
+    _tryEmit(peerId, mac, name ?? '', colorIndex, prefecture, template, finalRssi, peerBadgeLevel);
   }
 
-  (String?, TemplateMessage) _parseProfileBytes(List<int> dataBytes) {
+  (String?, TemplateMessage, int) _parseProfileBytes(List<int> dataBytes) {
     final sepIdx = dataBytes.indexOf(0x00);
     String? name;
     TemplateMessage template = const TemplateMessage();
+    int badgeLevel = 0;
     if (sepIdx >= 0) {
       name = sepIdx > 0
           ? utf8.decode(dataBytes.sublist(0, sepIdx), allowMalformed: true).trim()
@@ -197,23 +201,28 @@ class BleScanner {
           phraseIndex:   _decodeByte(dataBytes[sepIdx + 4]),
         );
       }
+      // バッジレベル（phraseの次のバイト）
+      if (dataBytes.length >= sepIdx + 6) {
+        badgeLevel = dataBytes[sepIdx + 5] & 0xFF;
+      }
     } else {
       name = dataBytes.isNotEmpty
           ? utf8.decode(dataBytes, allowMalformed: true).trim()
           : '';
     }
-    return (name, template);
+    return (name, template, badgeLevel);
   }
 
   // 0xFF = 未回答（kNotSet = -1）
   static int _decodeByte(int b) => b == 0xFF ? -1 : b & 0xFF;
 
   void _tryEmit(String peerId, String mac, String name,
-      int colorIndex, int prefecture, TemplateMessage template, int rssi) {
+      int colorIndex, int prefecture, TemplateMessage template, int rssi,
+      [int peerBadgeLevel = 0]) {
     if (name.isEmpty) return;
     if (_emittedPeers.contains(peerId)) return;
     _emittedPeers.add(peerId);
-    debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name rssi=${rssi}dBm');
+    debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name rssi=${rssi}dBm badge=$peerBadgeLevel');
     _encounterCtrl.add(EncounterEvent(
       time: DateTime.now(),
       peerId: peerId,
@@ -223,6 +232,7 @@ class BleScanner {
       prefecture: prefecture,
       template: template,
       rssi: rssi,
+      peerBadgeLevel: peerBadgeLevel,
     ));
   }
 }

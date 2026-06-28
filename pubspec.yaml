@@ -1,7 +1,7 @@
 name: ble_encounter
 description: BLEすれ違い検知アプリ
 publish_to: 'none'
-version: 1.5.13+20
+version: 1.5.15+22
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -22,6 +22,9 @@ dependencies:
 
   # CSV エクスポート共有
   share_plus: ^9.0.0
+
+  # データインポート（ファイル選択）
+  file_picker: ^8.0.0+1
 
   # パーミッション要求
   permission_handler: ^11.3.1
