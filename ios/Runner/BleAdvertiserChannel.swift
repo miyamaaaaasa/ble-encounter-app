@@ -6,11 +6,9 @@ class BleAdvertiserChannel: NSObject, CBPeripheralManagerDelegate {
     private let methodChannel: FlutterMethodChannel
     private var peripheralManager: CBPeripheralManager?
     private var pendingResult: FlutterResult?
-    private var pendingPeerId: Data?
     private var pendingProfile: Data?
     private var isAdvertising = false
 
-    static let restoreIdentifier = "com.example.ble_encounter.peripheral"
     static let serviceUUID = CBUUID(string: "A7B3C9D1-E5F0-4A2B-8C6D-9E1F3A5B7C2D")
 
     init(messenger: FlutterBinaryMessenger) {
@@ -49,12 +47,13 @@ class BleAdvertiserChannel: NSObject, CBPeripheralManagerDelegate {
 
     private func startAdvertise(peerId: Data, profile: Data, result: @escaping FlutterResult) {
         stopAdvertise()
-        pendingPeerId = peerId
         pendingProfile = profile
         pendingResult = result
 
+        // No CBPeripheralManagerOptionRestoreIdentifierKey: state restoration caused
+        // crashes after force-kill because iOS tried to deliver willRestoreState before
+        // the manager was recreated, leaving the callback with no delegate.
         let options: [String: Any] = [
-            CBPeripheralManagerOptionRestoreIdentifierKey: BleAdvertiserChannel.restoreIdentifier,
             CBPeripheralManagerOptionShowPowerAlertKey: false
         ]
         // nil queue = main thread; Flutter result callbacks must run on main thread
@@ -68,9 +67,7 @@ class BleAdvertiserChannel: NSObject, CBPeripheralManagerDelegate {
         }
         peripheralManager?.delegate = nil
         peripheralManager = nil
-        pendingPeerId = nil
         pendingProfile = nil
-        // Don't nil out pendingResult here to avoid leaking unanswered calls
     }
 
     // MARK: - CBPeripheralManagerDelegate
@@ -123,14 +120,5 @@ class BleAdvertiserChannel: NSObject, CBPeripheralManagerDelegate {
             pendingResult?(nil)
         }
         pendingResult = nil
-    }
-
-    func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String: Any]) {
-        print("[BleAdv] willRestoreState")
-        if let services = dict[CBPeripheralManagerRestoredStateServicesKey] as? [CBMutableService] {
-            for service in services {
-                peripheral.add(service)
-            }
-        }
     }
 }
