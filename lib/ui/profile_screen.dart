@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,7 +36,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _nameCtrl;
   late int _colorIndex;
   late TemplateMessage _template;
-  int _prefecture = -1; // 出身地（都道府県コード）
+  int _prefecture = -1;
 
   @override
   void initState() {
@@ -68,8 +69,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _sanitizeName();
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('名前は必須です')),
+      showCupertinoDialog(
+        context: context,
+        builder: (_) => CupertinoAlertDialog(
+          title: const Text('名前を入力してください'),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
       return;
     }
@@ -84,9 +95,73 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         );
     if (!widget.isFirstLaunch && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('保存しました')));
+      showCupertinoDialog(
+        context: context,
+        builder: (_) => CupertinoAlertDialog(
+          title: const Text('保存しました'),
+          actions: [
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     }
+  }
+
+  Future<void> _showPicker<T>({
+    required String title,
+    required List<String> options,
+    required int currentIndex,
+    required ValueChanged<int> onSelected,
+    bool hasNone = true,
+  }) async {
+    int tempIndex = hasNone ? currentIndex + 1 : currentIndex;
+    final allOptions = hasNone ? ['未設定', ...options] : options;
+
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (_) => Container(
+        height: 300,
+        color: CupertinoColors.systemBackground.resolveFrom(context),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                CupertinoButton(
+                  child: const Text('キャンセル'),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 16)),
+                CupertinoButton(
+                  child: const Text('完了'),
+                  onPressed: () {
+                    onSelected(hasNone ? tempIndex - 1 : tempIndex);
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+            Expanded(
+              child: CupertinoPicker(
+                scrollController: FixedExtentScrollController(
+                    initialItem: tempIndex.clamp(0, allOptions.length - 1)),
+                itemExtent: 40,
+                onSelectedItemChanged: (i) => tempIndex = i,
+                children: allOptions
+                    .map((s) => Center(child: Text(s)))
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -95,299 +170,323 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final registeredAt = profile?.registeredAt;
     final initial =
         _nameCtrl.text.isNotEmpty ? _nameCtrl.text.characters.first : '?';
+    final bright = Theme.of(context).brightness;
 
-    final avatar = CircleAvatar(
-      radius: 48,
-      backgroundColor: avatarColors[_colorIndex],
-      child: Text(
-        initial,
-        style: const TextStyle(
-            fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold),
+    final avatar = GestureDetector(
+      onTap: () => _showColorPicker(),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 48,
+            backgroundColor: avatarColors[_colorIndex],
+            child: Text(
+              initial,
+              style: const TextStyle(
+                  fontSize: 40,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text('タップして色を変更',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context))),
+        ],
       ),
     );
 
-    // hobbyDetail のアイテム（カテゴリ変更時に連動）
-    final catIdx     = _template.hobbyCategory.clamp(0, TemplateMessage.hobbyDetails.length - 1);
+    final catIdx = _template.hobbyCategory.clamp(
+        0, TemplateMessage.hobbyDetails.length - 1);
     final detailItems = TemplateMessage.hobbyDetails[catIdx];
-    final safeDetail  = _template.hobbyDetail == -1
+    final safeDetail = _template.hobbyDetail == -1
         ? -1
         : _template.hobbyDetail.clamp(0, detailItems.length - 1);
+
+    final prefLabel = _prefecture < 0 || _prefecture >= _prefectureNames.length
+        ? '未設定'
+        : _prefectureNames[_prefecture];
+
+    final statusLabel = _template.statusIndex < 0
+        ? '未回答'
+        : TemplateMessage.statusList[
+            _template.statusIndex.clamp(0, TemplateMessage.statusList.length - 1)];
+
+    final hobbyLabel = _template.hobbyCategory < 0
+        ? '未回答'
+        : TemplateMessage.hobbyCategories[
+            _template.hobbyCategory.clamp(0, TemplateMessage.hobbyCategories.length - 1)];
+
+    final detailLabel = _template.hobbyDetail < 0 || _template.hobbyCategory < 0
+        ? '未回答'
+        : detailItems[safeDetail.clamp(0, detailItems.length - 1)];
+
+    final phraseLabel = _template.phraseIndex < 0
+        ? '未回答'
+        : TemplateMessage.phraseList[
+            _template.phraseIndex.clamp(0, TemplateMessage.phraseList.length - 1)];
 
     final body = CustomScrollView(
       slivers: [
         if (!widget.isFirstLaunch)
           const SliverAppBar.large(title: Text('プロフィール'))
         else
-          const SliverAppBar(
-            title: Text('Profile Setup'),
+          CupertinoSliverNavigationBar(
+            largeTitle: const Text('Profile Setup'),
             automaticallyImplyLeading: false,
-            pinned: true,
+            border: null,
           ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              const SizedBox(height: 12),
-              Center(child: avatar),
-              const SizedBox(height: 28),
-
-              // ─── 名前 ─────────────────────────────────────────────
-              TextField(
-                controller: _nameCtrl,
-                maxLength: 10,
-                keyboardType: TextInputType.emailAddress,
-                inputFormatters: [_asciiFormatter],
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'English only · max 10 chars',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person_outline),
-                ),
-                onChanged: (_) => _sanitizeName(),
-              ),
-              const SizedBox(height: 20),
-
-              // ─── 定型文設定 ──────────────────────────────────────
-              Text('ひとこと設定',
-                  style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 12),
-
-              // 状態
-              DropdownButtonFormField<int>(
-                value: _template.statusIndex,
-                decoration: const InputDecoration(
-                  labelText: '状態（任意）',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.emoji_emotions_outlined),
-                ),
-                items: [
-                  const DropdownMenuItem(value: -1, child: Text('未回答')),
-                  ...TemplateMessage.statusList
-                      .asMap()
-                      .entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key, child: Text(e.value))),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _template = _template.copyWith(statusIndex: v));
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // 趣味カテゴリ
-              DropdownButtonFormField<int>(
-                value: _template.hobbyCategory,
-                decoration: const InputDecoration(
-                  labelText: '趣味カテゴリ（任意）',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.interests_outlined),
-                ),
-                items: [
-                  const DropdownMenuItem(value: -1, child: Text('未回答')),
-                  ...TemplateMessage.hobbyCategories
-                      .asMap()
-                      .entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key, child: Text(e.value))),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _template = _template.copyWith(
-                      hobbyCategory: v,
-                      hobbyDetail: v == -1 ? -1 : 0));
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // 趣味詳細（カテゴリ連動）
-              if (_template.hobbyCategory != -1)
-                DropdownButtonFormField<int>(
-                  key: ValueKey(_template.hobbyCategory),
-                  value: safeDetail,
-                  decoration: const InputDecoration(
-                    labelText: '趣味詳細（任意）',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.tag_outlined),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: -1, child: Text('未回答')),
-                    ...detailItems
-                        .asMap()
-                        .entries
-                        .map((e) => DropdownMenuItem(
-                            value: e.key, child: Text(e.value))),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() => _template = _template.copyWith(hobbyDetail: v));
-                  },
-                ),
-              if (_template.hobbyCategory != -1) const SizedBox(height: 12),
-
-              // 出身地（都道府県）
-              DropdownButtonFormField<int>(
-                value: _prefecture,
-                decoration: const InputDecoration(
-                  labelText: '出身地（任意）',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.place_outlined),
-                ),
-                items: [
-                  const DropdownMenuItem(value: -1, child: Text('未設定')),
-                  ..._prefectureNames.asMap().entries.map((e) =>
-                      DropdownMenuItem(value: e.key, child: Text(e.value))),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _prefecture = v);
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // 締めの一言
-              DropdownButtonFormField<int>(
-                value: _template.phraseIndex,
-                decoration: const InputDecoration(
-                  labelText: '締めの一言（任意）',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.chat_bubble_outline),
-                ),
-                items: [
-                  const DropdownMenuItem(value: -1, child: Text('未回答')),
-                  ...TemplateMessage.phraseList
-                      .asMap()
-                      .entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key, child: Text(e.value))),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _template = _template.copyWith(phraseIndex: v));
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // プレビュー
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'プレビュー',
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: Theme.of(context).colorScheme.outline),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_template.statusText}  ·  ${_template.hobbyCategoryText}(${_template.hobbyDetailText})  ·  ${_template.phraseText}',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
               const SizedBox(height: 24),
+              avatar,
+              const SizedBox(height: 32),
 
-              // ─── アバターカラー ──────────────────────────────────
-              Text('Avatar Color',
-                  style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(avatarColors.length, (i) {
-                  final selected = i == _colorIndex;
-                  return GestureDetector(
-                    onTap: () => setState(() => _colorIndex = i),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: avatarColors[i],
-                        border: selected
-                            ? Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface,
-                                width: 3)
-                            : null,
-                        boxShadow: selected
-                            ? [
-                                BoxShadow(
-                                    color:
-                                        avatarColors[i].withOpacity(0.5),
-                                    blurRadius: 8)
-                              ]
-                            : null,
-                      ),
-                      child: selected
-                          ? const Icon(Icons.check,
-                              color: Colors.white, size: 22)
-                          : null,
+              // ─── 名前 ────────────────────────────────────────────────
+              CupertinoListSection.insetGrouped(
+                header: const Text('名前'),
+                children: [
+                  CupertinoTextFormFieldRow(
+                    controller: _nameCtrl,
+                    maxLength: 10,
+                    keyboardType: TextInputType.emailAddress,
+                    inputFormatters: [_asciiFormatter],
+                    placeholder: 'English only · max 10 chars',
+                    prefix: const Icon(CupertinoIcons.person,
+                        color: CupertinoColors.systemBlue, size: 20),
+                    onChanged: (_) => _sanitizeName(),
+                    style: TextStyle(
+                        color: bright == Brightness.dark
+                            ? CupertinoColors.white
+                            : CupertinoColors.black),
+                  ),
+                ],
+              ),
+
+              // ─── ひとこと ─────────────────────────────────────────────
+              CupertinoListSection.insetGrouped(
+                header: const Text('ひとこと設定'),
+                children: [
+                  _PickerRow(
+                    label: '状態',
+                    value: statusLabel,
+                    onTap: () => _showPicker(
+                      title: '状態',
+                      options: TemplateMessage.statusList,
+                      currentIndex: _template.statusIndex,
+                      onSelected: (i) =>
+                          setState(() => _template = _template.copyWith(statusIndex: i)),
                     ),
-                  );
-                }),
+                  ),
+                  _PickerRow(
+                    label: '趣味カテゴリ',
+                    value: hobbyLabel,
+                    onTap: () => _showPicker(
+                      title: '趣味カテゴリ',
+                      options: TemplateMessage.hobbyCategories,
+                      currentIndex: _template.hobbyCategory,
+                      onSelected: (i) => setState(() => _template =
+                          _template.copyWith(hobbyCategory: i, hobbyDetail: i == -1 ? -1 : 0)),
+                    ),
+                  ),
+                  if (_template.hobbyCategory != -1)
+                    _PickerRow(
+                      label: '趣味詳細',
+                      value: detailLabel,
+                      onTap: () => _showPicker(
+                        title: '趣味詳細',
+                        options: detailItems,
+                        currentIndex: safeDetail,
+                        onSelected: (i) =>
+                            setState(() => _template = _template.copyWith(hobbyDetail: i)),
+                      ),
+                    ),
+                  _PickerRow(
+                    label: '出身地',
+                    value: prefLabel,
+                    onTap: () => _showPicker(
+                      title: '出身地',
+                      options: _prefectureNames.toList(),
+                      currentIndex: _prefecture,
+                      onSelected: (i) => setState(() => _prefecture = i),
+                    ),
+                  ),
+                  _PickerRow(
+                    label: '締めの一言',
+                    value: phraseLabel,
+                    onTap: () => _showPicker(
+                      title: '締めの一言',
+                      options: TemplateMessage.phraseList,
+                      currentIndex: _template.phraseIndex,
+                      onSelected: (i) =>
+                          setState(() => _template = _template.copyWith(phraseIndex: i)),
+                    ),
+                  ),
+                ],
+              ),
+
+              // ─── プレビュー ──────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.secondarySystemGroupedBackground
+                        .resolveFrom(context),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('プレビュー',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: CupertinoColors.secondaryLabel
+                                  .resolveFrom(context))),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_template.statusText}  ·  ${_template.hobbyCategoryText}(${_template.hobbyDetailText})  ·  ${_template.phraseText}',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
               ),
 
               if (registeredAt != null) ...[
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today_outlined,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.outline),
-                    const SizedBox(width: 8),
-                    Text('登録日',
-                        style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.outline)),
-                    const Spacer(),
-                    Text(
-                      fmtDate(registeredAt),
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ],
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Icon(CupertinoIcons.calendar,
+                          size: 15,
+                          color: CupertinoColors.secondaryLabel
+                              .resolveFrom(context)),
+                      const SizedBox(width: 6),
+                      Text('登録日',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: CupertinoColors.secondaryLabel
+                                  .resolveFrom(context))),
+                      const Spacer(),
+                      Text(fmtDate(registeredAt),
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w500)),
+                    ],
+                  ),
                 ),
               ],
-              const SizedBox(height: 36),
-              FilledButton.icon(
-                onPressed: _save,
-                icon: Icon(widget.isFirstLaunch
-                    ? Icons.arrow_forward
-                    : Icons.check),
-                label:
-                    Text(widget.isFirstLaunch ? 'はじめる' : '保存'),
-                style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52)),
+
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: CupertinoButton.filled(
+                  onPressed: _save,
+                  child: Text(widget.isFirstLaunch ? 'はじめる' : '保存'),
+                ),
               ),
               if (widget.isFirstLaunch) ...[
                 const SizedBox(height: 12),
-                Text(
-                  'Your name and template message are shared with nearby people.\nEnglish name only. Anonymous OK.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline),
-                  textAlign: TextAlign.center,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    'Your name and template message are shared with nearby people.\nEnglish name only. Anonymous OK.',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: CupertinoColors.secondaryLabel
+                            .resolveFrom(context)),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ],
-            ]),
+              const SizedBox(height: 48),
+            ],
           ),
         ),
       ],
     );
 
     return widget.isFirstLaunch ? Scaffold(body: body) : body;
+  }
+
+  void _showColorPicker() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (_) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Avatar Color',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: List.generate(avatarColors.length, (i) {
+                final selected = i == _colorIndex;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() => _colorIndex = i);
+                    Navigator.pop(context);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: avatarColors[i],
+                      border: selected
+                          ? Border.all(
+                              color: CupertinoColors.label.resolveFrom(context),
+                              width: 3)
+                          : null,
+                    ),
+                    child: selected
+                        ? const Icon(CupertinoIcons.checkmark,
+                            color: Colors.white, size: 22)
+                        : null,
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  const _PickerRow({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoListTile(
+      title: Text(label),
+      additionalInfo: Text(
+        value,
+        style: TextStyle(
+            color: CupertinoColors.secondaryLabel.resolveFrom(context)),
+      ),
+      trailing: const CupertinoListTileChevron(),
+      onTap: onTap,
+    );
   }
 }

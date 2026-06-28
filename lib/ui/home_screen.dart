@@ -1,6 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../providers/ble_providers.dart';
 import '../services/notification_service.dart';
 import 'today_screen.dart';
@@ -34,14 +34,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // 日次通知タップで今日タブ(0)に切り替え
     NotificationService.onDailyNotificationTap = () {
       if (mounted) setState(() => _selectedIndex = 0);
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkBatteryOptimization();
       _showNewBadgeIfAny();
     });
+    // Battery optimization dialog intentionally removed — iOS does not have
+    // this concept and the dialog was appearing incorrectly on iOS devices.
   }
 
   @override
@@ -59,37 +59,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ref.read(appProvider.notifier).start();
       }
     }
-  }
-
-  Future<void> _checkBatteryOptimization() async {
-    if (!mounted) return;
-    final status = await Permission.ignoreBatteryOptimizations.status;
-    if (status.isGranted || !mounted) return;
-    _showBatteryDialog();
-  }
-
-  void _showBatteryDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.battery_alert_outlined, size: 36),
-        title: const Text('バックグラウンド動作を許可'),
-        content: const Text(
-          'すれ違い通信を常に動かすため、バッテリーの最適化対象から除外してください。',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('後で')),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await Permission.ignoreBatteryOptimizations.request();
-            },
-            child: const Text('設定する'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showNewBadgeIfAny() {
@@ -113,44 +82,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         index: _selectedIndex,
         children: _screens,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: (i) {
+      bottomNavigationBar: CupertinoTabBar(
+        currentIndex: _selectedIndex,
+        onTap: (i) {
           if (i == 0 || i == 1) {
             ref.read(appProvider.notifier).clearNewEncounterFlag();
           }
           setState(() => _selectedIndex = i);
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.today_outlined),
-            selectedIcon: Icon(Icons.today),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.today),
+            activeIcon: Icon(CupertinoIcons.today_fill),
             label: '今日',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.person_2),
+            activeIcon: Icon(CupertinoIcons.person_2_fill),
             label: '広場',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined),
-            selectedIcon: Icon(Icons.sports_esports),
-            label: 'ミニゲーム',
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.game_controller),
+            activeIcon: Icon(CupertinoIcons.game_controller_solid),
+            label: 'ゲーム',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.workspace_premium_outlined),
-            selectedIcon: Icon(Icons.workspace_premium),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.star),
+            activeIcon: Icon(CupertinoIcons.star_fill),
             label: 'バッジ',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.person),
+            activeIcon: Icon(CupertinoIcons.person_fill),
             label: 'プロフィール',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.settings),
+            activeIcon: Icon(CupertinoIcons.settings_solid),
             label: '設定',
           ),
         ],

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/ble_providers.dart';
@@ -16,11 +17,19 @@ class App extends StatelessWidget {
         colorSchemeSeed: const Color(0xFF378ADD),
         useMaterial3: true,
         brightness: Brightness.light,
+        platform: TargetPlatform.iOS,
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {TargetPlatform.iOS: CupertinoPageTransitionsBuilder()},
+        ),
       ),
       darkTheme: ThemeData(
         colorSchemeSeed: const Color(0xFF378ADD),
         useMaterial3: true,
         brightness: Brightness.dark,
+        platform: TargetPlatform.iOS,
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {TargetPlatform.iOS: CupertinoPageTransitionsBuilder()},
+        ),
       ),
       home: const _RootScreen(),
     );
@@ -36,7 +45,7 @@ class _RootScreen extends ConsumerWidget {
 
     if (state.isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CupertinoActivityIndicator()),
       );
     }
 
