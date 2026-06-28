@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/ble_providers.dart';
@@ -34,14 +33,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // 日次通知タップで今日タブ(0)に切り替え
     NotificationService.onDailyNotificationTap = () {
       if (mounted) setState(() => _selectedIndex = 0);
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showNewBadgeIfAny();
     });
-    // Battery optimization dialog intentionally removed — iOS does not have
-    // this concept and the dialog was appearing incorrectly on iOS devices.
   }
 
   @override
@@ -82,43 +80,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         index: _selectedIndex,
         children: _screens,
       ),
-      bottomNavigationBar: CupertinoTabBar(
-        currentIndex: _selectedIndex,
-        onTap: (i) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (i) {
           if (i == 0 || i == 1) {
             ref.read(appProvider.notifier).clearNewEncounterFlag();
           }
           setState(() => _selectedIndex = i);
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.today),
-            activeIcon: Icon(CupertinoIcons.today_fill),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.today_outlined),
+            selectedIcon: Icon(Icons.today),
             label: '今日',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.person_2),
-            activeIcon: Icon(CupertinoIcons.person_2_fill),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
             label: '広場',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.game_controller),
-            activeIcon: Icon(CupertinoIcons.game_controller_solid),
-            label: 'ゲーム',
+          NavigationDestination(
+            icon: Icon(Icons.sports_esports_outlined),
+            selectedIcon: Icon(Icons.sports_esports),
+            label: 'ミニゲーム',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.star),
-            activeIcon: Icon(CupertinoIcons.star_fill),
+          NavigationDestination(
+            icon: Icon(Icons.workspace_premium_outlined),
+            selectedIcon: Icon(Icons.workspace_premium),
             label: 'バッジ',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.person),
-            activeIcon: Icon(CupertinoIcons.person_fill),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
             label: 'プロフィール',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.settings),
-            activeIcon: Icon(CupertinoIcons.settings_solid),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
             label: '設定',
           ),
         ],
