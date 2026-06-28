@@ -138,7 +138,7 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> _loadData() async {
     final profile   = await _storage.loadOwnProfile();
     var encounters  = await _storage.loadEncounters();
-    final badges    = await BadgeService.load();
+    var badges      = await BadgeService.load();
 
     // スキャン間隔を復元
     final prefs = await SharedPreferences.getInstance();
@@ -160,6 +160,11 @@ class AppNotifier extends Notifier<AppState> {
       debugPrint('[App] auto-rescued past unrevealed encounters');
     }
 
+    // バッジ移行処理: アップデート済みユーザーにも遡及付与
+    if (profile != null) {
+      badges = await _migrateBadges(badges: badges, encounters: encounters);
+    }
+
     state = state.copyWith(
       isLoading:  false,
       ownProfile: profile,
@@ -168,11 +173,26 @@ class AppNotifier extends Notifier<AppState> {
     );
     if (profile != null) {
       // Defer BLE start until after the UI has rendered the home screen.
-      // Without this, permission dialogs appear while isLoading=false state
-      // change hasn't been drawn yet, causing an apparent "frozen white screen".
       await Future.delayed(const Duration(milliseconds: 300));
       await _autoStart();
     }
+  }
+
+  // アップデート移行・インポート後のバッジ遡及付与
+  // スタートバッジがなければ付与し、解放済みエンカウント数に応じたカウントバッジも付与
+  Future<List<AppBadge>> _migrateBadges({
+    required List<AppBadge> badges,
+    required List<EncounterRecord> encounters,
+  }) async {
+    var updated = await BadgeService.awardStartBadge(badges);
+    final totalRevealed = encounters.where((e) => e.isRevealed).length;
+    if (totalRevealed > 0) {
+      updated = await BadgeService.checkCountBadges(
+        totalRevealed: totalRevealed,
+        existing: updated,
+      );
+    }
+    return updated;
   }
 
   Future<void> _autoStart() async {
@@ -501,15 +521,23 @@ class AppNotifier extends Notifier<AppState> {
       await _storage.saveOwnProfile(result.profile!);
     }
     await _storage.saveEncounters(result.encounters);
-    await BadgeService.save(result.badges);
     await GameStorage.save(result.gameData);
+
+    // インポートファイルにバッジが含まれていない（旧バージョンからのファイル）場合は
+    // 既存バッジを維持したまま遡及付与を行う
+    final baseBadges = result.badges.isNotEmpty ? result.badges : state.badges;
+    final finalBadges = await _migrateBadges(
+      badges:     baseBadges,
+      encounters: result.encounters,
+    );
+    await BadgeService.save(finalBadges);
 
     state = state.copyWith(
       ownProfile: result.profile ?? state.ownProfile,
       encounters: result.encounters,
-      badges:     result.badges,
+      badges:     finalBadges,
     );
-    debugPrint('[App] import applied: ${result.encounters.length} encounters, ${result.badges.length} badges');
+    debugPrint('[App] import applied: ${result.encounters.length} encounters, ${finalBadges.length} badges');
   }
 
   void dispose() {
