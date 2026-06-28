@@ -89,7 +89,8 @@ class AppNotifier extends Notifier<AppState> {
   @override
   AppState build() {
     _loadData();
-    _btStateSub = FlutterBluePlus.adapterState.listen(_onBluetoothState);
+    // BT state listener is started inside _autoStart() after permissions are
+    // confirmed, to avoid creating a CBCentralManager before authorization.
     return const AppState();
   }
 
@@ -164,12 +165,22 @@ class AppNotifier extends Notifier<AppState> {
       encounters: encounters,
       badges:     badges,
     );
-    if (profile != null) await _autoStart();
+    if (profile != null) {
+      // Defer BLE start until after the UI has rendered the home screen.
+      // Without this, permission dialogs appear while isLoading=false state
+      // change hasn't been drawn yet, causing an apparent "frozen white screen".
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _autoStart();
+    }
   }
 
   Future<void> _autoStart() async {
     final ok = await requestPermissions();
-    if (ok) await start();
+    if (!ok) return;
+    // Start BT adapter state listener only after permissions are granted,
+    // so CBCentralManager is not created before authorization.
+    _btStateSub ??= FlutterBluePlus.adapterState.listen(_onBluetoothState);
+    await start();
   }
 
   // ─── Profile ─────────────────────────────────────────────────────────────
@@ -221,9 +232,10 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> start() async {
     _userStopped = false;
-    // async 中に BT状態イベントが割り込む競合を防ぐ二重起動ガード
     if (state.isRunning || _starting) return;
     _starting = true;
+    // Ensure BT adapter listener is running (may not be if start() called directly)
+    _btStateSub ??= FlutterBluePlus.adapterState.listen(_onBluetoothState);
     final profile = state.ownProfile;
     if (profile == null) {
       state = state.copyWith(errorMessage: 'プロフィールを設定してください');
