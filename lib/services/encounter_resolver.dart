@@ -3,12 +3,28 @@ import '../models/piece_data.dart';
 import 'piece_storage.dart';
 import 'supabase_service.dart';
 
+/// サーバーから解析されたユーザー情報
+class ResolvedProfile {
+  final String userId;
+  final String displayName;
+  final int colorIndex;
+  final DateTime metAt;
+
+  const ResolvedProfile({
+    required this.userId,
+    required this.displayName,
+    required this.colorIndex,
+    required this.metAt,
+  });
+}
+
 /// ゲート時刻にローカルの保留トークンをサーバーで解析し、ピースを収集する。
 class EncounterResolver {
   /// 解析を実行し、新規取得 or 更新されたピースを返す。
-  /// progressCallback: (現在のトークン番号, 総数) → コールバック（演出用）
+  /// onProfileResolved: サーバーで解析された各ユーザー情報のコールバック（EncounterRecord更新用）
   static Future<List<PuzzlePiece>> resolveAndCollect({
     void Function(int current, int total)? onProgress,
+    void Function(ResolvedProfile profile)? onProfileResolved,
   }) async {
     final tokens = await PendingScanStorage.getAllTokens();
     if (tokens.isEmpty) return [];
@@ -35,6 +51,14 @@ class EncounterResolver {
       final name      = r['display_name'] as String? ?? '???';
       final color     = (r['color_index'] as num?)?.toInt() ?? 0;
       final metAt     = await PendingScanStorage.scannedAtFor(token) ?? DateTime.now();
+
+      // サーバーファースト: 解析結果をコールバックで通知（EncounterRecord更新用）
+      onProfileResolved?.call(ResolvedProfile(
+        userId: ownerId,
+        displayName: name,
+        colorIndex: color,
+        metAt: metAt,
+      ));
 
       final existIdx  = updated.indexWhere((p) => p.ownerId == ownerId);
       if (existIdx >= 0) {

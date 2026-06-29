@@ -17,24 +17,11 @@ class OwnProfile {
     this.registeredAt,
   });
 
-  /// BLE スキャン応答ペイロード。
-  /// フォーマット: [0xBF][colorIdx][prefecture or 0xFF][name ASCII ≤9][0x00][status][hobby][detail][phrase][badgeLevel]
-  /// 合計最大 18 bytes（27 byte 制限内）
+  /// BLE スキャン応答ペイロード（サーバーファースト版）。
+  /// プライバシー保護のため個人情報は一切送信しない。
+  /// BLEでは暗号化されたトークンのみを交換し、プロフィールはサーバーから取得する。
   Uint8List toScanPayload({int badgeLevel = 0}) {
-    const nameMax = 9;
-    final nameBytes = _trimAscii(utf8.encode(name), nameMax);
-    final out = BytesBuilder();
-    out.addByte(0xBF);
-    out.addByte(colorIndex & 0xFF);
-    out.addByte(prefecture == -1 ? 0xFF : (prefecture & 0x3F)); // 0xFF=未設定, 0-46=都道府県
-    out.add(nameBytes);
-    out.addByte(0x00);
-    out.addByte(template.statusIndex   == -1 ? 0xFF : template.statusIndex   & 0xFF);
-    out.addByte(template.hobbyCategory == -1 ? 0xFF : template.hobbyCategory & 0xFF);
-    out.addByte(template.hobbyDetail   == -1 ? 0xFF : template.hobbyDetail   & 0xFF);
-    out.addByte(template.phraseIndex   == -1 ? 0xFF : template.phraseIndex   & 0xFF);
-    out.addByte(badgeLevel & 0xFF);
-    return out.takeBytes();
+    return Uint8List(0);
   }
 
   static List<int> _trimAscii(List<int> bytes, int maxLen) {

@@ -432,21 +432,26 @@ class AppNotifier extends Notifier<AppState> {
   // ─── Encounter ───────────────────────────────────────────────────────────
 
   Future<void> _onEncounter(EncounterEvent event) async {
-    debugPrint('[Encounter] name=${event.name} id=${event.peerId.substring(28)}');
-
-    // Phase3: スキャンしたトークンをローカルキューに保存（ゲート時刻に解析）
+    // Phase3: スキャンしたトークンをローカルキューに保存（サーバーで解析）
     PendingScanStorage.add(event.peerId, event.time);
 
-    await _upsertEncounter(
-      peerId:         event.peerId,
-      name:           event.name,
-      colorIndex:     event.colorIndex,
-      prefecture:     event.prefecture,
-      template:       event.template,
-      rssi:           event.rssi,
-      peerBadgeLevel: event.peerBadgeLevel,
-    );
-    debugPrint('[App] encountered: ${event.name}');
+    // サーバーファースト: BLEにプロフィールが含まれている場合のみ即座にEncounterRecord作成
+    // トークンのみの場合はサーバー解析後にEncounterRecordが作成される
+    if (event.name.isNotEmpty) {
+      await _upsertEncounter(
+        peerId:         event.peerId,
+        name:           event.name,
+        colorIndex:     event.colorIndex,
+        prefecture:     event.prefecture,
+        template:       event.template,
+        rssi:           event.rssi,
+        peerBadgeLevel: event.peerBadgeLevel,
+      );
+      debugPrint('[App] encountered: ${event.name}');
+    } else {
+      debugPrint('[App] token captured (server-first): ${event.peerId.substring(28)}');
+      state = state.copyWith(hasNewEncounter: true);
+    }
   }
 
   // 切断イベント → ランダム 10〜30分後に通知スケジュール
@@ -523,6 +528,23 @@ class AppNotifier extends Notifier<AppState> {
     final trimmed = list.take(500).toList();
     state = state.copyWith(encounters: trimmed, hasNewEncounter: true);
     await _storage.saveEncounters(trimmed);
+  }
+
+  // サーバーファースト: サーバー解析結果からEncounterRecordを作成/更新
+  Future<void> upsertFromServerProfile({
+    required String peerId,
+    required String name,
+    required int colorIndex,
+    required DateTime metAt,
+  }) async {
+    await _upsertEncounter(
+      peerId: peerId,
+      name: name,
+      colorIndex: colorIndex,
+      prefecture: -1,
+      template: const TemplateMessage(),
+      rssi: 0,
+    );
   }
 
   // データのインポート（機種変移行用）

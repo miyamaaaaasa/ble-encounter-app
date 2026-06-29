@@ -2,7 +2,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/piece_data.dart';
+import '../../providers/ble_providers.dart' show appProvider;
 import '../../providers/puzzle_providers.dart';
+import '../../services/encounter_resolver.dart';
 import '../../services/piece_storage.dart';
 
 /// ゲートの「電波解析」演出画面
@@ -70,6 +72,14 @@ class _DecryptScreenState extends ConsumerState<DecryptScreen>
           _total     = total;
           _statusText = '解析中 [$current/$total]';
         });
+      },
+      onProfileResolved: (profile) {
+        ref.read(appProvider.notifier).upsertFromServerProfile(
+          peerId: profile.userId,
+          name: profile.displayName,
+          colorIndex: profile.colorIndex,
+          metAt: profile.metAt,
+        );
       },
     );
 

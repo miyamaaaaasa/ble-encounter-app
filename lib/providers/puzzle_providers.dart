@@ -4,6 +4,8 @@ import '../models/piece_data.dart';
 import '../services/encounter_resolver.dart';
 import '../services/piece_storage.dart';
 
+typedef ProfileResolvedCallback = void Function(ResolvedProfile profile);
+
 class PuzzleState {
   final List<PuzzlePiece> pieces;
   final bool   isResolving;
@@ -53,6 +55,7 @@ class PuzzleNotifier extends Notifier<PuzzleState> {
   /// 自動・手動どちらからも呼べる（多重実行ガード付き）。
   Future<List<PuzzlePiece>> resolvePending({
     void Function(int current, int total)? onProgress,
+    ProfileResolvedCallback? onProfileResolved,
   }) async {
     if (state.isResolving) return const [];
     state = state.copyWith(isResolving: true, progress: 0, progressTotal: 0);
@@ -62,6 +65,7 @@ class PuzzleNotifier extends Notifier<PuzzleState> {
           state = state.copyWith(progress: c, progressTotal: t);
           onProgress?.call(c, t);
         },
+        onProfileResolved: onProfileResolved,
       );
       final all = await PuzzlePieceStorage.load();
       state = state.copyWith(

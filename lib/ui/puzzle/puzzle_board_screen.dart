@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/piece_data.dart';
+import '../../providers/ble_providers.dart' show appProvider;
 import '../../providers/puzzle_providers.dart';
+import '../../services/encounter_resolver.dart';
 import '../piece_editor/piece_editor_screen.dart';
 import 'decrypt_screen.dart';
 
@@ -28,7 +30,16 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
   Future<void> _autoResolve() async {
     if (_autoResolved) return;
     _autoResolved = true;
-    final newPieces = await ref.read(puzzleProvider.notifier).resolvePending();
+    final newPieces = await ref.read(puzzleProvider.notifier).resolvePending(
+      onProfileResolved: (profile) {
+        ref.read(appProvider.notifier).upsertFromServerProfile(
+          peerId: profile.userId,
+          name: profile.displayName,
+          colorIndex: profile.colorIndex,
+          metAt: profile.metAt,
+        );
+      },
+    );
     if (newPieces.isNotEmpty) {
       // 自動取得分は静かに公開済みにする（演出は電波解析ボタンで）
       await ref.read(puzzleProvider.notifier)

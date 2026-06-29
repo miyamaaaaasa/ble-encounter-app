@@ -147,26 +147,26 @@ class BleScanner {
     // アクティブタイムスタンプを更新（すでに検知済みでも更新する）
     _activePeers[peerId] = DateTime.now();
 
-    String? name;
+    // サーバーファースト: BLEではトークンのみ交換。プロフィールはサーバーから取得。
+    // トークン検出時点ではプロフィール情報なしで即座にイベント発行。
+    String name = '';
     int colorIndex  = 0;
     int prefecture  = -1;
     TemplateMessage template = const TemplateMessage();
-
     int peerBadgeLevel = 0;
+
+    // レガシー互換: プロフィール付きペイロードも解析可能（旧バージョンとの共存）
     if (payload.length >= 21 &&
         payload[17] == 0xFF &&
         payload[18] == 0xFE &&
         payload[19] == _magicProfile) {
-      // レガシーフォーマット: [0xBE][peerId 16][0xFF][0xFE][0xBF][colorIdx][data...]
       colorIndex = payload[20] & 0xFF;
       final dataBytes = payload.length > 21 ? payload.sublist(21) : <int>[];
-      (name, template, peerBadgeLevel) = _parseProfileBytes(dataBytes);
-      debugPrint('[BleScanner] FULL id=${peerId.substring(28)} name=$name rssi=${result.rssi}dBm');
+      final (n1, t1, b1) = _parseProfileBytes(dataBytes);
+      name = n1 ?? ''; template = t1; peerBadgeLevel = b1;
     } else if (payload.length >= 20 && payload[17] == _magicProfile) {
-      // 新フォーマット: [0xBE][peerId 16][0xBF][colorIdx][prefecture?][name...]
       colorIndex = payload[18] & 0xFF;
       int offset = 19;
-      // 次のバイトが都道府県コード範囲 (0-46) か 0xFF(未設定) なら読み込む
       if (payload.length > 19) {
         final pfByte = payload[19] & 0xFF;
         if (pfByte == 0xFF || pfByte <= 46) {
@@ -175,16 +175,17 @@ class BleScanner {
         }
       }
       final dataBytes = payload.length > offset ? payload.sublist(offset) : <int>[];
-      (name, template, peerBadgeLevel) = _parseProfileBytes(dataBytes);
-      debugPrint('[BleScanner] FULL2 mac=$mac id=${peerId.substring(28)} name=$name pref=$prefecture badge=$peerBadgeLevel');
-    } else {
-      _partialPeers[mac] = _PartialData(peerId: peerId, rssi: result.rssi);
-      return;
+      final (n2, t2, b2) = _parseProfileBytes(dataBytes);
+      name = n2 ?? ''; template = t2; peerBadgeLevel = b2;
     }
+    // トークンのみペイロード（サーバーファースト版）: name は空のまま
+
+    debugPrint('[BleScanner] TOKEN mac=$mac id=${peerId.substring(28)} hasProfile=${name.isNotEmpty}');
 
     final partial    = _partialPeers[mac];
     final finalRssi  = partial?.rssi ?? result.rssi;
-    _tryEmit(peerId, mac, name ?? '', colorIndex, prefecture, template, finalRssi, peerBadgeLevel);
+    // サーバーファースト: name が空でもトークンイベントを発行（PendingScanStorage に保存するため）
+    _tryEmitToken(peerId, mac, name, colorIndex, prefecture, template, finalRssi, peerBadgeLevel);
   }
 
   (String?, TemplateMessage, int) _parseProfileBytes(List<int> dataBytes) {
@@ -219,13 +220,12 @@ class BleScanner {
   // 0xFF = 未回答（kNotSet = -1）
   static int _decodeByte(int b) => b == 0xFF ? -1 : b & 0xFF;
 
-  void _tryEmit(String peerId, String mac, String name,
+  void _tryEmitToken(String peerId, String mac, String name,
       int colorIndex, int prefecture, TemplateMessage template, int rssi,
       [int peerBadgeLevel = 0]) {
-    if (name.isEmpty) return;
     if (_emittedPeers.contains(peerId)) return;
     _emittedPeers.add(peerId);
-    debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=$name rssi=${rssi}dBm badge=$peerBadgeLevel');
+    debugPrint('[BleScanner] ENCOUNTER id=${peerId.substring(28)} name=${name.isEmpty ? "(token-only)" : name} rssi=${rssi}dBm');
     _encounterCtrl.add(EncounterEvent(
       time: DateTime.now(),
       peerId: peerId,
