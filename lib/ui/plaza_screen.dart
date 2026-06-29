@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/app_badge.dart';
 import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart';
 import 'encounter_helpers.dart';
@@ -160,9 +161,25 @@ class _PlazaTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(encounter.name,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(encounter.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 14)),
+                      ),
+                      // 相手のバッジ（BLEペイロードから取得・保有時のみ）
+                      if (encounter.peerBadgeLevel > 0) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          AppBadge.badgeLevelLabel(encounter.peerBadgeLevel)
+                              .split(' ').first, // 絵文字部分のみ
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ],
+                    ],
+                  ),
                   Row(
                     children: [
                       Text(fmtDate(encounter.lastMet),

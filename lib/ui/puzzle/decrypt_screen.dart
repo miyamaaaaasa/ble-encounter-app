@@ -1,19 +1,19 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/piece_data.dart';
-import '../../services/encounter_resolver.dart';
+import '../../providers/puzzle_providers.dart';
 import '../../services/piece_storage.dart';
-import 'puzzle_board_screen.dart';
 
 /// ゲートの「電波解析」演出画面
-class DecryptScreen extends StatefulWidget {
+class DecryptScreen extends ConsumerStatefulWidget {
   const DecryptScreen({super.key});
 
   @override
-  State<DecryptScreen> createState() => _DecryptScreenState();
+  ConsumerState<DecryptScreen> createState() => _DecryptScreenState();
 }
 
-class _DecryptScreenState extends State<DecryptScreen>
+class _DecryptScreenState extends ConsumerState<DecryptScreen>
     with TickerProviderStateMixin {
   late AnimationController _scanCtrl;
   late AnimationController _glitchCtrl;
@@ -52,7 +52,7 @@ class _DecryptScreenState extends State<DecryptScreen>
     if (pendingTokens.isEmpty) {
       setState(() { _statusText = '未解析データなし'; _done = true; });
       await Future.delayed(const Duration(seconds: 1));
-      if (mounted) _navigateToBoard([]);
+      if (mounted) Navigator.of(context).pop();
       return;
     }
 
@@ -62,7 +62,7 @@ class _DecryptScreenState extends State<DecryptScreen>
     });
     await Future.delayed(const Duration(milliseconds: 800));
 
-    final results = await EncounterResolver.resolveAndCollect(
+    final results = await ref.read(puzzleProvider.notifier).resolvePending(
       onProgress: (current, total) {
         if (!mounted) return;
         setState(() {
@@ -72,6 +72,10 @@ class _DecryptScreenState extends State<DecryptScreen>
         });
       },
     );
+
+    // 解析完了 → 公開済みにする
+    await ref.read(puzzleProvider.notifier)
+        .markRevealed(results.map((p) => p.ownerId));
 
     if (!mounted) return;
     setState(() {
@@ -83,17 +87,7 @@ class _DecryptScreenState extends State<DecryptScreen>
     });
 
     await Future.delayed(const Duration(milliseconds: 1400));
-    if (mounted) _navigateToBoard(results);
-  }
-
-  void _navigateToBoard(List<PuzzlePiece> newPieces) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder:      (_, __, ___) => PuzzleBoardScreen(highlightPieces: newPieces),
-        transitionsBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
-        transitionDuration: const Duration(milliseconds: 700),
-      ),
-    );
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override

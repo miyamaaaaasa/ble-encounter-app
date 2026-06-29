@@ -126,7 +126,6 @@ class _PieceEditorScreenState extends ConsumerState<PieceEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(_editorProvider);
-    final cs    = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A1A),
@@ -154,36 +153,31 @@ class _PieceEditorScreenState extends ConsumerState<PieceEditorScreen> {
       ),
       body: Column(
         children: [
-          // プレビュー + キャンバス
+          // プレビュー（縮小表示）
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _PieceThumbnail(piece: state.piece, size: 48),
+                const SizedBox(width: 12),
+                const Text('プレビュー',
+                    style: TextStyle(color: Colors.white54, fontSize: 12)),
+              ],
+            ),
+          ),
+          // キャンバス（タッチ描画）— 常に正方形
           Expanded(
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // プレビュー（縮小表示）
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _PieceThumbnail(piece: state.piece, size: 64),
-                        const SizedBox(width: 16),
-                        Text('プレビュー', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // キャンバス（タッチ描画）
-                    Expanded(
-                      child: AspectRatio(
-                        aspectRatio: 1,
-                        child: _PixelCanvas(
-                          piece:        state.piece,
-                          selectedColor: state.selectedColor,
-                          onPaint:      ref.read(_editorProvider.notifier).paint,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: _PixelCanvas(
+                    piece:         state.piece,
+                    selectedColor: state.selectedColor,
+                    onPaint:       ref.read(_editorProvider.notifier).paint,
+                  ),
                 ),
               ),
             ),
@@ -371,6 +365,8 @@ class _PieceThumbnailState extends State<_PieceThumbnail> {
   }
 
   Future<void> _buildImage() async {
+    // toArgbList は 0xAARRGGBB の Uint32。リトルエンディアンでバイト列にすると
+    // B,G,R,A の順になるため、PixelFormat は bgra8888 を使う（rgba8888 だと赤青反転）。
     final argb = widget.piece.toArgbList();
     final codec = await ui.ImageDescriptor.raw(
       await ui.ImmutableBuffer.fromUint8List(
@@ -378,7 +374,7 @@ class _PieceThumbnailState extends State<_PieceThumbnail> {
       ),
       width:            PieceData.gridSize,
       height:           PieceData.gridSize,
-      pixelFormat:      ui.PixelFormat.rgba8888,
+      pixelFormat:      ui.PixelFormat.bgra8888,
     ).instantiateCodec();
     final frame = await codec.getNextFrame();
     if (mounted) setState(() => _image = frame.image);
@@ -387,15 +383,21 @@ class _PieceThumbnailState extends State<_PieceThumbnail> {
   @override
   Widget build(BuildContext context) {
     if (_image == null) {
-      return SizedBox(width: widget.size, height: widget.size,
-          child: const Center(child: CircularProgressIndicator(strokeWidth: 1)));
+      return SizedBox(width: widget.size, height: widget.size);
     }
-    return RawImage(
-      image:             _image,
-      width:             widget.size,
-      height:            widget.size,
-      filterQuality:     FilterQuality.none, // ピクセルアート用（補間なし）
-      fit:               BoxFit.fill,
+    // AspectRatio で常に正方形を保証（縦長/横長に潰れない）
+    final img = RawImage(
+      image:         _image,
+      filterQuality: FilterQuality.none, // ピクセルアート用（補間なし）
+      fit:           BoxFit.contain,
+    );
+    if (widget.size == double.infinity) {
+      return AspectRatio(aspectRatio: 1, child: img);
+    }
+    return SizedBox(
+      width:  widget.size,
+      height: widget.size,
+      child:  img,
     );
   }
 }
