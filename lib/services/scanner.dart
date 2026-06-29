@@ -56,7 +56,10 @@ class BleScanner {
   Stream<EncounterEvent> get encounters => _encounterCtrl.stream;
   Stream<String>         get departures => _departureCtrl.stream;
 
-  final String _myPeerIdHex = PeerId.hex;
+  String _myPeerIdHex = PeerId.hex;
+
+  // Phase3: 現在の自分のBLEトークン（ローテーション対応）
+  void setOwnTokenHex(String hex) => _myPeerIdHex = hex;
 
   Future<void> start() async {
     _stopped = false;

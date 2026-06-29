@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,9 +16,11 @@ import '../services/advertiser.dart';
 import '../services/badge_service.dart';
 import '../services/data_export_service.dart';
 import '../services/game_storage.dart';
+import '../services/piece_storage.dart';
 import '../services/scanner.dart';
 import '../services/profile_storage.dart';
 import '../services/notification_service.dart';
+import '../services/token_service.dart';
 
 // スキャン間隔プロバイダー（設定画面 → サイクルへ即時反映）
 final scanIntervalProvider = StateProvider<ScanInterval>((ref) => ScanInterval.two);
@@ -342,7 +345,10 @@ class AppNotifier extends Notifier<AppState> {
         return;
       }
       final badgeLevel = AppBadge.badgeLevelFrom(state.badges);
-      await _advertiser.startAdvertise(PeerId.bytes, profile.toScanPayload(badgeLevel: badgeLevel));
+      final tokenBytes = Uint8List.fromList(TokenService.tokenBytes);
+      // Phase3: 現在の使い捨てトークンをBLEに流す（オフライン時はPeerIdにフォールバック）
+      _scanner.setOwnTokenHex(TokenService.hexToken);
+      await _advertiser.startAdvertise(tokenBytes, profile.toScanPayload(badgeLevel: badgeLevel));
       await _scanner.start();
       debugPrint('[Cycle] BLE ON — ${kScanOnSeconds}s badge=$badgeLevel');
     } catch (e) {
@@ -427,6 +433,10 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> _onEncounter(EncounterEvent event) async {
     debugPrint('[Encounter] name=${event.name} id=${event.peerId.substring(28)}');
+
+    // Phase3: スキャンしたトークンをローカルキューに保存（ゲート時刻に解析）
+    PendingScanStorage.add(event.peerId, event.time);
+
     await _upsertEncounter(
       peerId:         event.peerId,
       name:           event.name,

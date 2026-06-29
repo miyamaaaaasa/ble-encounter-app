@@ -1,7 +1,7 @@
 name: ble_encounter
 description: BLEすれ違い検知アプリ
 publish_to: 'none'
-version: 1.5.16+23
+version: 1.6.1+25
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -31,6 +31,12 @@ dependencies:
 
   # 一時 ID 生成
   uuid: ^4.4.2
+
+  # サーバー連携
+  supabase_flutter: ^2.8.4
+
+  # トークンのセキュア保存
+  flutter_secure_storage: ^9.2.4
 
   # URL タップ対応
   url_launcher: ^6.3.0

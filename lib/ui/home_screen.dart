@@ -8,6 +8,7 @@ import 'minigame_screen.dart';
 import 'badge_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
+import 'puzzle/puzzle_board_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -25,6 +26,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     PlazaScreen(),
     MinigameScreen(),
     BadgeScreen(),
+    PuzzleBoardScreen(),
     ProfileScreen(),
     SettingsScreen(),
   ];
@@ -109,6 +111,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             icon: Icon(Icons.workspace_premium_outlined),
             selectedIcon: Icon(Icons.workspace_premium),
             label: 'バッジ',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'カケラ',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
