@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   display_name    TEXT,
   color_index     INT DEFAULT 0,
   piece_data      JSONB,          -- 16x16 ピクセルインデックス配列 (256整数)
-  piece_palette   JSONB           -- 将来拡張用（現在は固定パレット使用）
+  piece_palette   JSONB,          -- 将来拡張用（現在は固定パレット使用）
+  avatar_url      TEXT            -- プロフィール画像URL（Supabase Storage）
 );
 
 -- ② 使い捨てトークン（BLEで流すID、24時間で自動回転）
@@ -98,7 +99,8 @@ RETURNS TABLE(
   user_id       UUID,
   display_name  TEXT,
   color_index   INT,
-  piece_data    JSONB
+  piece_data    JSONB,
+  avatar_url    TEXT
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -111,7 +113,8 @@ BEGIN
       t.user_id,
       u.display_name,
       u.color_index,
-      u.piece_data
+      u.piece_data,
+      u.avatar_url
     FROM public.tokens t
     JOIN public.users u ON u.id = t.user_id
     WHERE t.token = ANY(token_list)

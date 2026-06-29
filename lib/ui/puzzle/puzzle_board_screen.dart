@@ -4,6 +4,7 @@ import '../../models/piece_data.dart';
 import '../../providers/ble_providers.dart' show appProvider;
 import '../../providers/puzzle_providers.dart';
 import '../../services/encounter_resolver.dart';
+import '../games/memory_game_screen.dart';
 import '../piece_editor/piece_editor_screen.dart';
 import 'decrypt_screen.dart';
 
@@ -81,6 +82,14 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.sports_esports_outlined),
+            tooltip: '神経衰弱',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MemoryGameScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.brush_outlined),
             tooltip: 'マイピースを描く',

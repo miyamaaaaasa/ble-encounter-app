@@ -1,9 +1,12 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/own_profile.dart';
 import '../models/template_message.dart';
 import '../providers/ble_providers.dart';
+import '../services/avatar_service.dart';
+import '../services/supabase_service.dart';
 import 'encounter_helpers.dart';
 
 final _asciiFormatter =
@@ -35,7 +38,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late TextEditingController _nameCtrl;
   late int _colorIndex;
   late TemplateMessage _template;
-  int _prefecture = -1; // 出身地（都道府県コード）
+  int _prefecture = -1;
+  String? _avatarUrl;
+  bool _uploadingAvatar = false;
 
   @override
   void initState() {
@@ -45,6 +50,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _colorIndex = profile?.colorIndex ?? 0;
     _template = profile?.template ?? const TemplateMessage();
     _prefecture = profile?.prefecture ?? -1;
+    final uid = SupabaseService.userId;
+    if (uid != null) _avatarUrl = AvatarService.getAvatarUrl(uid);
   }
 
   @override
@@ -62,6 +69,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
     }
     setState(() {});
+  }
+
+  Future<void> _pickAvatar() async {
+    if (_uploadingAvatar) return;
+    setState(() => _uploadingAvatar = true);
+    try {
+      final bytes = await AvatarService.pickAndCompress();
+      if (bytes == null) { setState(() => _uploadingAvatar = false); return; }
+      final url = await AvatarService.upload(bytes);
+      if (url != null && mounted) {
+        setState(() => _avatarUrl = '$url?t=${DateTime.now().millisecondsSinceEpoch}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('アバターを更新しました')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('アバター更新に失敗: $e')),
+        );
+      }
+    }
+    if (mounted) setState(() => _uploadingAvatar = false);
   }
 
   Future<void> _save() async {
@@ -96,13 +126,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final initial =
         _nameCtrl.text.isNotEmpty ? _nameCtrl.text.characters.first : '?';
 
-    final avatar = CircleAvatar(
-      radius: 48,
-      backgroundColor: avatarColors[_colorIndex],
-      child: Text(
-        initial,
-        style: const TextStyle(
-            fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold),
+    final avatar = GestureDetector(
+      onTap: _pickAvatar,
+      child: Stack(
+        children: [
+          CircleAvatar(
+            radius: 48,
+            backgroundColor: avatarColors[_colorIndex],
+            backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+            child: _avatarUrl == null
+                ? Text(initial,
+                    style: const TextStyle(
+                        fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold))
+                : null,
+          ),
+          Positioned(
+            bottom: 0, right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+              ),
+              child: _uploadingAvatar
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
 
