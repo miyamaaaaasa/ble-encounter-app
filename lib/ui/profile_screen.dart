@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +7,6 @@ import '../models/own_profile.dart';
 import '../models/template_message.dart';
 import '../providers/ble_providers.dart';
 import '../services/avatar_service.dart';
-import '../services/supabase_service.dart';
 import 'encounter_helpers.dart';
 
 final _asciiFormatter =
@@ -39,7 +39,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late int _colorIndex;
   late TemplateMessage _template;
   int _prefecture = -1;
-  String? _avatarUrl;
+  File? _localAvatar;
   bool _uploadingAvatar = false;
 
   @override
@@ -50,8 +50,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _colorIndex = profile?.colorIndex ?? 0;
     _template = profile?.template ?? const TemplateMessage();
     _prefecture = profile?.prefecture ?? -1;
-    final uid = SupabaseService.userId;
-    if (uid != null) _avatarUrl = AvatarService.getAvatarUrl(uid);
+    // アイコンはローカルファイルから復元（再起動後も保持される）
+    AvatarService.loadLocal().then((f) {
+      if (f != null && mounted) setState(() => _localAvatar = f);
+    });
   }
 
   @override
@@ -77,11 +79,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     try {
       final bytes = await AvatarService.pickAndCompress();
       if (bytes == null) { setState(() => _uploadingAvatar = false); return; }
-      final url = await AvatarService.upload(bytes);
-      if (url != null && mounted) {
-        setState(() => _avatarUrl = '$url?t=${DateTime.now().millisecondsSinceEpoch}');
+      // ローカルに必ず保存（オフラインでも消えない）。サーバー送信は自動リトライ。
+      final file = await AvatarService.uploadOrQueue(bytes);
+      if (mounted) {
+        // FileImageのキャッシュを消して即時反映
+        imageCache.clear();
+        imageCache.clearLiveImages();
+        setState(() => _localAvatar = file);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('アバターを更新しました')),
+          const SnackBar(content: Text('アイコンを保存しました')),
         );
       }
     } catch (e) {
@@ -133,8 +139,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           CircleAvatar(
             radius: 48,
             backgroundColor: avatarColors[_colorIndex],
-            backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-            child: _avatarUrl == null
+            backgroundImage: _localAvatar != null ? FileImage(_localAvatar!) : null,
+            child: _localAvatar == null
                 ? Text(initial,
                     style: const TextStyle(
                         fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold))

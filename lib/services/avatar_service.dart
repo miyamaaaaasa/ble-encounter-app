@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AvatarService {
@@ -9,6 +12,61 @@ class AvatarService {
   static const _bucket = 'avatars';
   static const _maxSize = 200 * 1024; // 200KB
   static const _maxDim = 256;
+  static const _pendingKey = 'avatar_pending_upload_v1';
+
+  // ─── ローカル永続化（アプリ再起動後もアイコンを保持） ───────────────
+
+  static Future<File> _localFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/avatar.jpg');
+  }
+
+  /// ローカル保存済みのアバターファイル（なければ null）
+  static Future<File?> loadLocal() async {
+    try {
+      final f = await _localFile();
+      return await f.exists() ? f : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<File> saveLocal(Uint8List bytes) async {
+    final f = await _localFile();
+    await f.writeAsBytes(bytes, flush: true);
+    return f;
+  }
+
+  /// ローカル保存＋サーバーアップロード。
+  /// オフライン・認証未完了でもローカルには必ず保存され、
+  /// 次回起動時に retryPendingUpload() で自動アップロードされる。
+  static Future<File> uploadOrQueue(Uint8List bytes) async {
+    final file = await saveLocal(bytes);
+    final url = await upload(bytes);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pendingKey, url == null);
+    return file;
+  }
+
+  /// 前回アップロードに失敗したアイコンを再送する（起動時に呼ぶ）
+  static Future<void> retryPendingUpload() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool(_pendingKey) ?? false)) return;
+      final f = await loadLocal();
+      if (f == null) {
+        await prefs.setBool(_pendingKey, false);
+        return;
+      }
+      final url = await upload(await f.readAsBytes());
+      if (url != null) {
+        await prefs.setBool(_pendingKey, false);
+        debugPrint('[Avatar] pending upload completed');
+      }
+    } catch (e) {
+      debugPrint('[Avatar] retryPendingUpload: $e');
+    }
+  }
 
   static Future<Uint8List?> pickAndCompress() async {
     final picker = ImagePicker();

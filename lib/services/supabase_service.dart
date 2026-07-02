@@ -37,15 +37,16 @@ class SupabaseService {
     }
   }
 
-  // 収集したトークンリストをユーザー情報に解析
-  static Future<List<Map<String, dynamic>>> resolveTokens(List<String> tokens) async {
-    if (!isReady || tokens.isEmpty) return [];
+  // 収集したトークンリストをユーザー情報に解析。
+  // 通信エラー時は null を返す（[] と区別し、呼び出し側でトークンを保持させる）
+  static Future<List<Map<String, dynamic>>?> resolveTokens(List<String> tokens) async {
+    if (!isReady || tokens.isEmpty) return isReady ? [] : null;
     try {
       final res = await _c.rpc('resolve_tokens', params: {'token_list': tokens});
       return (res as List).cast<Map<String, dynamic>>();
     } catch (e) {
       debugPrint('[Supabase] resolveTokens: $e');
-      return [];
+      return null;
     }
   }
 

@@ -93,6 +93,17 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             e.isRevealed && gates.any((g) => _gateFor(e.lastMet) == g))
         .toList();
 
+    // 過去30日の履歴（今日の分を除く・手動削除しない限り保持）
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final cutoff30   = todayStart.subtract(const Duration(days: 30));
+    final recentHistory = state.encounters
+        .where((e) =>
+            e.isRevealed &&
+            e.lastMet.isBefore(todayStart) &&
+            e.lastMet.isAfter(cutoff30))
+        .toList()
+      ..sort((a, b) => b.lastMet.compareTo(a.lastMet));
+
     return CustomScrollView(
       slivers: [
         SliverAppBar(
@@ -283,6 +294,42 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             itemCount: todayRevealed.length,
             itemBuilder: (ctx, i) =>
                 _RevealedTile(encounter: todayRevealed[i]),
+          ),
+        ],
+
+        // ─── 過去30日の履歴 ───────────────────────────────────────────────
+        if (recentHistory.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.history,
+                      size: 15,
+                      color: Theme.of(context).colorScheme.outline),
+                  const SizedBox(width: 5),
+                  Text(
+                    '最近30日の履歴',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.outline),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${recentHistory.length}人',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.outlineVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverList.builder(
+            itemCount: recentHistory.length,
+            itemBuilder: (ctx, i) =>
+                _RevealedTile(encounter: recentHistory[i]),
           ),
         ],
 

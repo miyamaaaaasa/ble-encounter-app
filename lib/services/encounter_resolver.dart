@@ -36,6 +36,13 @@ class EncounterResolver {
     debugPrint('[Resolver] resolving ${tokens.length} pending tokens...');
     final resolved = await SupabaseService.resolveTokens(tokens);
 
+    // 通信エラー（オフライン等）: トークンを削除せず次回に持ち越す。
+    // ここで削除するとすれ違いデータが永久に失われる。
+    if (resolved == null) {
+      debugPrint('[Resolver] server unreachable — keeping ${tokens.length} tokens');
+      return [];
+    }
+
     final existing   = await PuzzlePieceStorage.load();
     final updated    = List<PuzzlePiece>.from(existing);
     final newPieces  = <PuzzlePiece>[];

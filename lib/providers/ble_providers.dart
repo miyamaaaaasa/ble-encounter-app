@@ -13,6 +13,7 @@ import '../models/own_profile.dart';
 import '../models/encounter_record.dart';
 import '../models/template_message.dart';
 import '../services/advertiser.dart';
+import '../services/avatar_service.dart';
 import '../services/badge_service.dart';
 import '../services/data_export_service.dart';
 import '../services/game_storage.dart';
@@ -295,6 +296,9 @@ class AppNotifier extends Notifier<AppState> {
 
       await NotificationService.scheduleGateNotifications();
 
+      // 未送信のアイコンがあれば自動アップロード（初回設定時オフライン対策）
+      AvatarService.retryPendingUpload();
+
       // バッジレベルをサーバーに同期（相手側の広場表示用）
       final p = state.ownProfile;
       if (p != null) {
@@ -338,7 +342,26 @@ class AppNotifier extends Notifier<AppState> {
     Future.delayed(const Duration(seconds: 5), _autoResolveNow);
   }
 
+  // 日付が変わった未開封エンカウントを自動公開する。
+  // ミニゲーム（開封演出）を実施しなくても履歴が広場に残る。
+  // ゲート前の当日分は対象外（プライバシー仕様・開封演出は維持）。
+  Future<void> _rescuePastDays() async {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final needs = state.encounters
+        .any((e) => !e.isRevealed && e.lastMet.isBefore(todayStart));
+    if (!needs) return;
+    final list = state.encounters.map((e) {
+      if (!e.isRevealed && e.lastMet.isBefore(todayStart)) return e.reveal();
+      return e;
+    }).toList();
+    state = state.copyWith(encounters: list);
+    await _storage.saveEncounters(list);
+    debugPrint('[App] rescued unrevealed encounters from past days');
+  }
+
   Future<void> _autoResolveNow() async {
+    await _rescuePastDays();
     try {
       final pending = await PendingScanStorage.getAllTokens();
       if (pending.isEmpty) return;
@@ -585,7 +608,8 @@ class AppNotifier extends Notifier<AppState> {
       ));
     }
 
-    final trimmed = list.take(500).toList();
+    // 履歴保持: 手動削除しない限り消さない（容量保護の上限のみ）
+    final trimmed = list.take(1000).toList();
     state = state.copyWith(encounters: trimmed, hasNewEncounter: true);
     await _storage.saveEncounters(trimmed);
   }
