@@ -6,14 +6,39 @@ import '../core/ble_config.dart';
 import 'games/piece_puzzle.dart';
 import 'games/tower_rpg.dart';
 import 'games/aquarium.dart';
+import 'theme/palette.dart';
+import 'widgets/ui_kit.dart';
 
-// ─── ミニゲーム ハブ ──────────────────────────────────────────────────────────
-
-class MinigameScreen extends ConsumerWidget {
+/// ミニゲーム = ゲーム機のメニュー画面。
+/// 大きなカートリッジ風カードの横カルーセルで選ぶ。
+class MinigameScreen extends ConsumerStatefulWidget {
   const MinigameScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MinigameScreen> createState() => _MinigameScreenState();
+}
+
+class _MinigameScreenState extends ConsumerState<MinigameScreen> {
+  late final PageController _ctrl;
+  double _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = PageController(viewportFraction: 0.78)
+      ..addListener(() {
+        if (mounted) setState(() => _page = _ctrl.page ?? 0);
+      });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(appProvider);
     // 今日開封済みのすれ違いのみ（プライバシー保護: isRevealed必須）
     final todayRev = state.encounters
@@ -21,204 +46,266 @@ class MinigameScreen extends ConsumerWidget {
         .toList()
       ..sort((a, b) => b.lastMet.compareTo(a.lastMet));
 
-    // デバッグ時: 今日の遭遇がなければ全revealedの直近10件をテスト用に使用
     final List<EncounterRecord> gameEncounters;
     if (kDebugBle && todayRev.isEmpty) {
-      gameEncounters = state.encounters
-          .where((e) => e.isRevealed)
-          .take(10)
-          .toList();
+      gameEncounters =
+          state.encounters.where((e) => e.isRevealed).take(10).toList();
     } else {
       gameEncounters = todayRev;
     }
 
-    return CustomScrollView(
-      slivers: [
-        const SliverAppBar.large(title: Text('ミニゲーム')),
-
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-          sliver: SliverList.list(children: [
-            if (gameEncounters.isEmpty) ...[
-              const SizedBox(height: 48),
-              const Center(child: Text('🎮', style: TextStyle(fontSize: 72))),
-              const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  '今日の出会いを確認してから遊べます',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.outline,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Center(
-                child: Text(
-                  '「今日」タブで出会いを確認してね',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ] else ...[
-              _SectionHeader('今日の仲間', '${gameEncounters.length} 人と出会いました'),
-              const SizedBox(height: 8),
-              // 仲間サムネ
-              SizedBox(
-                height: 52,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: gameEncounters.length,
-                  itemBuilder: (ctx, i) {
-                    final e = gameEncounters[i];
-                    final initial = e.name.isNotEmpty ? e.name.characters.first : '?';
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: _avatarColor(e.peerId),
-                        child: Text(initial,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-
-            // ─── ゲームカード3枚 ─────────────────────────────────────────
-            _GameCard(
-              emoji: '🧩',
-              title: 'ピース集めの旅',
-              description: '出会った人からパズルのピースをもらおう。ホログラムの相手からはゴールドピースが手に入るかも！',
-              tag: gameEncounters.isEmpty ? null : '${gameEncounters.length} 枚もらえる',
-              onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => PiecePuzzleScreen(todayRevealed: gameEncounters))),
-            ),
-            const SizedBox(height: 12),
-
-            _GameCard(
-              emoji: '⚔️',
-              title: 'はじめましてタワーRPG',
-              description: '今日出会った人が勇者として参戦！紙質に応じてスキルが変わるタワー突破バトル。',
-              tag: gameEncounters.isEmpty ? null : '勇者 ${gameEncounters.length} 人',
-              onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => TowerRpgScreen(todayRevealed: gameEncounters))),
-            ),
-            const SizedBox(height: 12),
-
-            _GameCard(
-              emoji: '🐟',
-              title: 'すれちがい水族館',
-              description: 'すれ違った人の地域の魚が池に放流される！タップして釣り上げ、図鑑を埋めよう。',
-              tag: gameEncounters.isEmpty ? null : '今日 ${gameEncounters.length} 匹放流',
-              onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => AquariumScreen(todayRevealed: gameEncounters))),
-            ),
-            const SizedBox(height: 32),
-          ]),
-        ),
-      ],
-    );
-  }
-
-  Color _avatarColor(String peerId) {
-    const colors = [
-      Color(0xFF378ADD), Color(0xFF1D9E75), Color(0xFFD85A30),
-      Color(0xFFBA7517), Color(0xFF534AB7), Color(0xFFD4537E),
+    final games = [
+      _GameDef(
+        emoji: '🧩',
+        title: 'ピース集めの旅',
+        description: '出会った人からパズルのピースをもらおう。ホログラムの相手からはゴールドピースが手に入るかも！',
+        colors: const [Color(0xFFFFB88C), Color(0xFFFF8A70)],
+        tag: gameEncounters.isEmpty ? null : '${gameEncounters.length} 枚もらえる',
+        builder: () => PiecePuzzleScreen(todayRevealed: gameEncounters),
+      ),
+      _GameDef(
+        emoji: '⚔️',
+        title: 'はじめましてタワーRPG',
+        description: '今日出会った人が勇者として参戦！紙質に応じてスキルが変わるタワー突破バトル。',
+        colors: const [Color(0xFFA88FE0), Color(0xFF8368C9)],
+        tag: gameEncounters.isEmpty ? null : '勇者 ${gameEncounters.length} 人',
+        builder: () => TowerRpgScreen(todayRevealed: gameEncounters),
+      ),
+      _GameDef(
+        emoji: '🐟',
+        title: 'すれちがい水族館',
+        description: 'すれ違った人の地域の魚が池に放流される！タップして釣り上げ、図鑑を埋めよう。',
+        colors: const [Color(0xFF80CFEE), Color(0xFF5FA8DC)],
+        tag: gameEncounters.isEmpty ? null : '今日 ${gameEncounters.length} 匹放流',
+        builder: () => AquariumScreen(todayRevealed: gameEncounters),
+      ),
     ];
-    return colors[peerId.hashCode.abs() % colors.length];
+
+    return Container(
+      color: Palette.cream,
+      child: Column(
+        children: [
+          ScreenHeader(
+            title: 'ゲームセンター',
+            emoji: '🎮',
+            trailing: gameEncounters.isNotEmpty
+                ? StatChip(
+                    emoji: '🧑‍🤝‍🧑',
+                    label: '今日の仲間 ${gameEncounters.length}人',
+                    color: Palette.sun.withValues(alpha: 0.3))
+                : null,
+          ),
+
+          // 仲間の顔ぶれ
+          if (gameEncounters.isNotEmpty)
+            SizedBox(
+              height: 56,
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: gameEncounters.length,
+                itemBuilder: (ctx, i) {
+                  final e = gameEncounters[i];
+                  final initial =
+                      e.name.isNotEmpty ? e.name.characters.first : '?';
+                  final color = Palette.pastelAvatars[
+                      e.colorIndex % Palette.pastelAvatars.length];
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: color,
+                      backgroundImage: e.avatarUrl != null
+                          ? NetworkImage(e.avatarUrl!)
+                          : null,
+                      child: e.avatarUrl == null
+                          ? Text(initial,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold))
+                          : null,
+                    ),
+                  );
+                },
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+              child: SoftPanel(
+                color: Palette.creamDeep,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: const Row(
+                  children: [
+                    Text('💡', style: TextStyle(fontSize: 18)),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '「今日」タブで出会いを確認すると、その人たちと一緒に遊べるよ',
+                        style: TextStyle(fontSize: 12, color: Palette.inkSoft),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // ─── カートリッジカルーセル ─────────────────────────────
+          Expanded(
+            child: PageView.builder(
+              controller: _ctrl,
+              itemCount: games.length,
+              itemBuilder: (ctx, i) {
+                final dist = (i - _page).abs();
+                final scale = (1.0 - dist * 0.08).clamp(0.85, 1.0);
+                return Transform.scale(
+                  scale: scale,
+                  child: _GameCartridge(
+                    def: games[i],
+                    onPlay: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => games[i].builder()),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // ページドット
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16, top: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(games.length, (i) {
+                final sel = _page.round() == i;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: sel ? 22 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: sel ? Palette.coral : Palette.inkFaint,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-// ─── ゲームカード ─────────────────────────────────────────────────────────────
-class _GameCard extends StatelessWidget {
+class _GameDef {
   final String emoji;
   final String title;
   final String description;
+  final List<Color> colors;
   final String? tag;
-  final VoidCallback onTap;
-  const _GameCard({
-    required this.emoji, required this.title, required this.description,
-    this.tag, required this.onTap,
+  final Widget Function() builder;
+  const _GameDef({
+    required this.emoji,
+    required this.title,
+    required this.description,
+    required this.colors,
+    this.tag,
+    required this.builder,
   });
+}
+
+// ─── ゲームカートリッジ ──────────────────────────────────────────────────────
+class _GameCartridge extends StatelessWidget {
+  final _GameDef def;
+  final VoidCallback onPlay;
+  const _GameCartridge({required this.def, required this.onPlay});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Text(emoji, style: const TextStyle(fontSize: 40)),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Flexible(
-                    child: Text(title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15)),
-                  ),
-                  if (tag != null) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(tag!,
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                  ],
-                ]),
-                const SizedBox(height: 4),
-                Text(description,
-                    style: TextStyle(
-                        fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-              ]),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: def.colors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: def.colors.last.withValues(alpha: 0.45),
+              offset: const Offset(0, 6),
+              blurRadius: 14,
             ),
-            const SizedBox(width: 4),
-            Icon(Icons.chevron_right, color: theme.colorScheme.outline),
-          ]),
+          ],
+        ),
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // カートリッジの持ち手風ライン
+            Container(
+              width: 60,
+              height: 6,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const Spacer(),
+            Text(def.emoji, style: const TextStyle(fontSize: 84)),
+            const SizedBox(height: 16),
+            Text(
+              def.title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              def.description,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.5,
+                  color: Colors.white.withValues(alpha: 0.9)),
+            ),
+            if (def.tag != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(def.tag!,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ),
+            ],
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: ChunkyButton(
+                label: 'あそぶ！',
+                emoji: '▶️',
+                color: Colors.white,
+                deepColor: Colors.black.withValues(alpha: 0.15),
+                labelColor: def.colors.last,
+                onTap: onPlay,
+              ),
+            ),
+          ],
         ),
       ),
     );
-  }
-}
-
-// ─── セクションヘッダー ───────────────────────────────────────────────────────
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  const _SectionHeader(this.title, this.subtitle);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-      Text(subtitle,
-          style: TextStyle(
-              fontSize: 12, color: Theme.of(context).colorScheme.outline)),
-    ]);
   }
 }

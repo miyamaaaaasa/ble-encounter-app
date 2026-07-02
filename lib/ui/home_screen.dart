@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/ble_providers.dart';
 import '../services/notification_service.dart';
+import 'theme/palette.dart';
+import 'widgets/ui_kit.dart';
 import 'today_screen.dart';
 import 'plaza_screen.dart';
 import 'minigame_screen.dart';
@@ -31,11 +33,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     SettingsScreen(),
   ];
 
+  static const _dockItems = [
+    DockItem('🌞', '今日'),
+    DockItem('🏡', '広場'),
+    DockItem('🎮', 'ゲーム'),
+    DockItem('🏅', 'バッジ'),
+    DockItem('💎', 'カケラ'),
+    DockItem('😊', 'じぶん'),
+    DockItem('⚙️', '設定'),
+  ];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // 日次通知タップで今日タブ(0)に切り替え
     NotificationService.onDailyNotificationTap = () {
       if (mounted) setState(() => _selectedIndex = 0);
     };
@@ -78,56 +89,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Palette.cream,
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: (i) {
+      bottomNavigationBar: GameDock(
+        items: _dockItems,
+        selected: _selectedIndex,
+        onSelect: (i) {
           if (i == 0 || i == 1) {
             ref.read(appProvider.notifier).clearNewEncounterFlag();
           }
           setState(() => _selectedIndex = i);
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.today_outlined),
-            selectedIcon: Icon(Icons.today),
-            label: '今日',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: '広場',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined),
-            selectedIcon: Icon(Icons.sports_esports),
-            label: 'ミニゲーム',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.workspace_premium_outlined),
-            selectedIcon: Icon(Icons.workspace_premium),
-            label: 'バッジ',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.grid_view_outlined),
-            selectedIcon: Icon(Icons.grid_view),
-            label: 'カケラ',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'プロフィール',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: '設定',
-          ),
-        ],
       ),
     );
   }

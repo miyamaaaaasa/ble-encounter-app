@@ -59,74 +59,160 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
     final puzzle = ref.watch(puzzleProvider);
     final pieces = puzzle.pieces;
 
+    // 次のマイルストーン（10枚区切り）への進捗
+    final nextGoal = ((pieces.length ~/ 10) + 1) * 10;
+    final progress = (pieces.length / nextGoal).clamp(0.0, 1.0);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A1A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0A1A),
-        foregroundColor: Colors.white,
-        title: Row(
+      backgroundColor: const Color(0xFF171B2E),
+      body: SafeArea(
+        child: Column(
           children: [
-            const Text('カケラコレクション',
-                style: TextStyle(color: Colors.white, fontSize: 16)),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF00AAFF).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF00AAFF).withValues(alpha: 0.5)),
+            // ─── 夜空ヘッダー ───────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+              child: Row(
+                children: [
+                  const Text('💎', style: TextStyle(fontSize: 26)),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('カケラのよぞら',
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white)),
+                  ),
+                  _NightIconButton(
+                    icon: Icons.sports_esports_outlined,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const MemoryGameScreen()),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _NightIconButton(
+                    icon: Icons.brush_outlined,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const PieceEditorScreen()),
+                    ),
+                  ),
+                ],
               ),
-              child: Text('${pieces.length}枚',
-                  style: const TextStyle(color: Color(0xFF00AAFF), fontSize: 12)),
+            ),
+
+            // ─── 収集進捗パネル ─────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF232A45),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0x226FD8FF)),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('${pieces.length}',
+                            style: const TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF6FD8FF),
+                                height: 1.0)),
+                        const SizedBox(width: 4),
+                        const Text('枚 あつめた',
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.white70)),
+                        const Spacer(),
+                        Text('つぎの目標 $nextGoal枚',
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.white38)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 10,
+                        backgroundColor: const Color(0xFF171B2E),
+                        valueColor:
+                            const AlwaysStoppedAnimation(Color(0xFF6FD8FF)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ─── カケラグリッド ─────────────────────────────────
+            Expanded(
+              child: pieces.isEmpty
+                  ? _emptyState()
+                  : GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: 1, // 正方形セル
+                      ),
+                      itemCount: pieces.length,
+                      itemBuilder: (ctx, i) => _PieceCell(
+                        piece: pieces[i],
+                        onTap: () => _showDetail(pieces[i]),
+                      ),
+                    ),
+            ),
+
+            // ─── 電波解析ボタン ─────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const DecryptScreen(),
+                      fullscreenDialog: true),
+                ),
+                child: Container(
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF232A45),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: const Color(0x446FD8FF)),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Color(0x336FD8FF),
+                          blurRadius: 12,
+                          spreadRadius: 1),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.radar, color: Color(0xFF6FD8FF), size: 20),
+                      SizedBox(width: 8),
+                      Text('電波解析',
+                          style: TextStyle(
+                              color: Color(0xFF6FD8FF),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              letterSpacing: 2)),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sports_esports_outlined),
-            tooltip: '神経衰弱',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MemoryGameScreen()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.brush_outlined),
-            tooltip: 'マイピースを描く',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PieceEditorScreen()),
-            ),
-          ),
-        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (_) => const DecryptScreen(), fullscreenDialog: true),
-        ),
-        icon: const Icon(Icons.radar),
-        label: const Text('電波解析'),
-        backgroundColor: const Color(0xFF001122),
-        foregroundColor: const Color(0xFF00AAFF),
-      ),
-      body: pieces.isEmpty
-          ? _emptyState()
-          : GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount:   3,
-                crossAxisSpacing: 8,
-                mainAxisSpacing:  8,
-                childAspectRatio: 1, // 正方形セル
-              ),
-              itemCount: pieces.length,
-              itemBuilder: (ctx, i) => _PieceCell(
-                piece: pieces[i],
-                onTap: () => _showDetail(pieces[i]),
-              ),
-            ),
     );
   }
 
@@ -154,6 +240,30 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _PieceDetail(piece: piece),
+    );
+  }
+}
+
+// ─── 夜空用アイコンボタン ─────────────────────────────────────────────────────
+class _NightIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _NightIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: const Color(0xFF232A45),
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0x336FD8FF)),
+        ),
+        child: Icon(icon, size: 20, color: const Color(0xFF6FD8FF)),
+      ),
     );
   }
 }

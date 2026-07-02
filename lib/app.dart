@@ -12,64 +12,54 @@ class App extends StatelessWidget {
     return MaterialApp(
       title: 'はじめましてこんにちは',
       debugShowCheckedModeBanner: false,
-      theme: _buildTheme(Brightness.light),
-      darkTheme: _buildTheme(Brightness.dark),
+      theme: _buildTheme(),
+      themeMode: ThemeMode.light, // 世界観統一のため常にパステルの昼の世界
       home: const _RootScreen(),
     );
   }
 
-  // Android標準感を脱却したカスタムテーマ。
-  // 夜空×ネオンのアイデンティティ（カケラコレクション画面と統一感を持たせる）
-  static ThemeData _buildTheme(Brightness brightness) {
-    final isDark = brightness == Brightness.dark;
+  // 「人と出会うことが楽しいコミュニティゲーム」テーマ。
+  // Material部品は極力使わず、残った部品もクリーム×パステルに寄せる。
+  static ThemeData _buildTheme() {
+    const cream = Color(0xFFFBF3E4);
+    const ink = Color(0xFF4A3C31);
+    const coral = Color(0xFFFF8A70);
     final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF5B7FFF),
-      brightness: brightness,
-      surface: isDark ? const Color(0xFF0E1220) : const Color(0xFFF6F7FC),
+      seedColor: coral,
+      brightness: Brightness.light,
+      surface: cream,
     );
     final base = ThemeData(useMaterial3: true, colorScheme: scheme);
     return base.copyWith(
-      scaffoldBackgroundColor: isDark ? const Color(0xFF0E1220) : const Color(0xFFF6F7FC),
-      appBarTheme: AppBarTheme(
-        centerTitle: false,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.transparent,
-        titleTextStyle: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-          color: scheme.onSurface,
-        ),
-      ),
-      cardTheme: CardThemeData(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        color: isDark ? const Color(0xFF181D30) : Colors.white,
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        height: 68,
-        elevation: 0,
-        backgroundColor: isDark ? const Color(0xFF131828) : Colors.white,
-        indicatorColor: scheme.primary.withValues(alpha: 0.16),
-        labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: scheme.onSurface),
-        ),
-      ),
-      floatingActionButtonTheme: FloatingActionButtonThemeData(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      scaffoldBackgroundColor: cream,
+      textTheme: base.textTheme.apply(
+        bodyColor: ink,
+        displayColor: ink,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        backgroundColor: ink,
+        contentTextStyle: const TextStyle(
+            color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFFFFFDF8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFFE5D5BE)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFFE5D5BE)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: coral, width: 2),
+        ),
       ),
-      dividerTheme: DividerThemeData(
-        color: scheme.outlineVariant.withValues(alpha: 0.4),
-      ),
+      dividerTheme: const DividerThemeData(color: Color(0xFFE5D5BE)),
     );
   }
 }

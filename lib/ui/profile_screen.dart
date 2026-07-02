@@ -1,13 +1,14 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/dot_avatar.dart';
 import '../models/own_profile.dart';
 import '../models/template_message.dart';
 import '../providers/ble_providers.dart';
-import '../services/avatar_service.dart';
+import 'avatar_editor_screen.dart';
 import 'encounter_helpers.dart';
+import 'theme/palette.dart';
+import 'widgets/ui_kit.dart';
 
 final _asciiFormatter =
     FilteringTextInputFormatter.allow(RegExp(r'[\x20-\x7E]'));
@@ -39,8 +40,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late int _colorIndex;
   late TemplateMessage _template;
   int _prefecture = -1;
-  File? _localAvatar;
-  bool _uploadingAvatar = false;
+  DotAvatar? _dotAvatar;
 
   @override
   void initState() {
@@ -50,9 +50,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _colorIndex = profile?.colorIndex ?? 0;
     _template = profile?.template ?? const TemplateMessage();
     _prefecture = profile?.prefecture ?? -1;
-    // アイコンはローカルファイルから復元（再起動後も保持される）
-    AvatarService.loadLocal().then((f) {
-      if (f != null && mounted) setState(() => _localAvatar = f);
+    // ドット絵アイコンをローカルから復元（再起動後も保持される）
+    DotAvatarStorage.load().then((a) {
+      if (a != null && mounted) setState(() => _dotAvatar = a);
     });
   }
 
@@ -73,31 +73,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() {});
   }
 
-  Future<void> _pickAvatar() async {
-    if (_uploadingAvatar) return;
-    setState(() => _uploadingAvatar = true);
-    try {
-      final bytes = await AvatarService.pickAndCompress();
-      if (bytes == null) { setState(() => _uploadingAvatar = false); return; }
-      // ローカルに必ず保存（オフラインでも消えない）。サーバー送信は自動リトライ。
-      final file = await AvatarService.uploadOrQueue(bytes);
-      if (mounted) {
-        // FileImageのキャッシュを消して即時反映
-        imageCache.clear();
-        imageCache.clearLiveImages();
-        setState(() => _localAvatar = file);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('アイコンを保存しました')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('アバター更新に失敗: $e')),
-        );
-      }
+  Future<void> _editAvatar() async {
+    final result = await Navigator.push<DotAvatar>(
+      context,
+      MaterialPageRoute(builder: (_) => const AvatarEditorScreen()),
+    );
+    if (result != null && mounted) {
+      setState(() => _dotAvatar = result);
     }
-    if (mounted) setState(() => _uploadingAvatar = false);
   }
 
   Future<void> _save() async {
@@ -133,31 +116,42 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         _nameCtrl.text.isNotEmpty ? _nameCtrl.text.characters.first : '?';
 
     final avatar = GestureDetector(
-      onTap: _pickAvatar,
+      onTap: _editAvatar,
       child: Stack(
         children: [
-          CircleAvatar(
-            radius: 48,
-            backgroundColor: avatarColors[_colorIndex],
-            backgroundImage: _localAvatar != null ? FileImage(_localAvatar!) : null,
-            child: _localAvatar == null
-                ? Text(initial,
-                    style: const TextStyle(
-                        fontSize: 40, color: Colors.white, fontWeight: FontWeight.bold))
-                : null,
-          ),
-          Positioned(
-            bottom: 0, right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(4),
+          // ドット絵アイコン（未作成時はイニシャル）
+          if (_dotAvatar != null && !_dotAvatar!.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
+                color: Palette.card,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: Palette.lift(),
+              ),
+              child: DotAvatarView(
+                  avatar: _dotAvatar!, sizePx: 88, radius: 16),
+            )
+          else
+            CircleAvatar(
+              radius: 48,
+              backgroundColor:
+                  Palette.pastelAvatars[_colorIndex % Palette.pastelAvatars.length],
+              child: Text(initial,
+                  style: const TextStyle(
+                      fontSize: 40,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold)),
+            ),
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(
+                color: Palette.coral,
                 shape: BoxShape.circle,
               ),
-              child: _uploadingAvatar
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+              child: const Icon(Icons.brush, size: 15, color: Colors.white),
             ),
           ),
         ],
