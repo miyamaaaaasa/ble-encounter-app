@@ -51,11 +51,12 @@ class SupabaseService {
 
   // ─── Profile ─────────────────────────────────────────────────────
 
-  // 自分のプロフィール（表示名・色・ピース）をサーバーに同期
+  // 自分のプロフィール（表示名・色・ピース・バッジレベル）をサーバーに同期
   static Future<void> syncProfile({
     required String displayName,
     required int colorIndex,
     List<int>? piecePixels,
+    int? badgeLevel,
   }) async {
     if (!isReady) return;
     try {
@@ -64,6 +65,7 @@ class SupabaseService {
         'display_name': displayName,
         'color_index':  colorIndex,
         if (piecePixels != null) 'piece_data': piecePixels,
+        if (badgeLevel != null) 'badge_level': badgeLevel,
       });
     } catch (e) {
       debugPrint('[Supabase] syncProfile: $e');
@@ -84,27 +86,4 @@ class SupabaseService {
     }
   }
 
-  // 収集したピースをサーバーに記録（二重記録防止は UNIQUE 制約側で処理）
-  static Future<void> recordCollectedPiece({
-    required String ownerId,
-    required DateTime metAt,
-    required List<int> pieceSnapshot,
-  }) async {
-    if (!isReady) return;
-    try {
-      await _c.from('collected_pieces').upsert(
-        {
-          'collector_id':  userId,
-          'owner_id':      ownerId,
-          'last_met_at':   metAt.toIso8601String(),
-          'meet_count':    1,
-          'piece_snapshot': pieceSnapshot,
-        },
-        onConflict: 'collector_id,owner_id',
-        ignoreDuplicates: false,
-      );
-    } catch (e) {
-      debugPrint('[Supabase] recordCollectedPiece: $e');
-    }
-  }
 }

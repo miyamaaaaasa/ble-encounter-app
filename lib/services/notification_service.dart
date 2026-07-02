@@ -101,31 +101,49 @@ class NotificationService {
         if (scheduled.isBefore(now)) {
           scheduled = scheduled.add(const Duration(days: 1));
         }
-        await _plugin.zonedSchedule(
-          _gateNotifBase + hour,
-          _gateTitle(hour),
-          '今日のすれ違い通信結果をご確認ください',
-          scheduled,
-          NotificationDetails(
-            android: AndroidNotificationDetails(
-              dailyChannelId, '開門通知',
-              importance: Importance.defaultImportance,
-              playSound: sound,
-              enableVibration: vibr,
-            ),
-            iOS: DarwinNotificationDetails(
-              presentAlert: true,
-              presentBadge: true,
-              presentSound: sound,
-            ),
+        final details = NotificationDetails(
+          android: AndroidNotificationDetails(
+            dailyChannelId, '開門通知',
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: sound,
+            enableVibration: vibr,
           ),
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.time,
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: sound,
+          ),
         );
+        // AQUOS等でinexactは大幅遅延・不達になるため、まずexactを試す
+        try {
+          await _plugin.zonedSchedule(
+            _gateNotifBase + hour,
+            _gateTitle(hour),
+            '今日のすれ違い通信結果をご確認ください',
+            scheduled,
+            details,
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.time,
+          );
+        } catch (_) {
+          // exact alarm権限が拒否されている端末はinexactにフォールバック
+          await _plugin.zonedSchedule(
+            _gateNotifBase + hour,
+            _gateTitle(hour),
+            '今日のすれ違い通信結果をご確認ください',
+            scheduled,
+            details,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.time,
+          );
+        }
       }
-      debugPrint('[Notif] gate notifications scheduled');
+      debugPrint('[Notif] gate notifications scheduled (exact)');
     } catch (e) {
       debugPrint('[Notif] scheduleGateNotifications error: $e');
     }

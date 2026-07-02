@@ -51,13 +51,18 @@ class EncounterDetailSheet extends StatelessWidget {
                   CircleAvatar(
                     radius: 52,
                     backgroundColor: color,
-                    child: Text(
-                      initial,
-                      style: const TextStyle(
-                          fontSize: 44,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold),
-                    ),
+                    backgroundImage: encounter.avatarUrl != null
+                        ? NetworkImage(encounter.avatarUrl!)
+                        : null,
+                    child: encounter.avatarUrl == null
+                        ? Text(
+                            initial,
+                            style: const TextStyle(
+                                fontSize: 44,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          )
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   Text(

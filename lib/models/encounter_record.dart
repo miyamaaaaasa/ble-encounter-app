@@ -13,8 +13,10 @@ class EncounterRecord {
   final TemplateMessage template;
   // プライバシー保護: 結果演出完了まで画面に表示しない
   final bool isRevealed;
-  // 相手のバッジレベル（BLEペイロードから取得）
+  // 相手のバッジレベル（サーバー解析で取得）
   final int peerBadgeLevel;
+  // 相手のアバター画像URL（サーバー解析で取得）
+  final String? avatarUrl;
 
   const EncounterRecord({
     required this.peerId,
@@ -28,6 +30,7 @@ class EncounterRecord {
     this.template = const TemplateMessage(),
     this.isRevealed = false,
     this.peerBadgeLevel = 0,
+    this.avatarUrl,
   });
 
   bool get metToday {
@@ -51,6 +54,7 @@ class EncounterRecord {
     int? prefecture,
     TemplateMessage? template,
     int? peerBadgeLevel,
+    String? avatarUrl,
   }) =>
       EncounterRecord(
         peerId: peerId,
@@ -64,6 +68,7 @@ class EncounterRecord {
         template: template ?? this.template,
         isRevealed: isRevealed && metToday,
         peerBadgeLevel: peerBadgeLevel ?? this.peerBadgeLevel,
+        avatarUrl: avatarUrl ?? this.avatarUrl,
       );
 
   // 結果演出完了時に呼ぶ
@@ -79,6 +84,7 @@ class EncounterRecord {
         template: template,
         isRevealed: true,
         peerBadgeLevel: peerBadgeLevel,
+        avatarUrl: avatarUrl,
       );
 
   Map<String, dynamic> toMap() => {
@@ -96,6 +102,7 @@ class EncounterRecord {
         'tp': template.phraseIndex,
         'rv': isRevealed,
         'bl': peerBadgeLevel,
+        if (avatarUrl != null) 'av': avatarUrl,
       };
 
   static EncounterRecord fromMap(Map<String, dynamic> m) => EncounterRecord(
@@ -115,6 +122,7 @@ class EncounterRecord {
         ),
         isRevealed: m['rv'] as bool? ?? true, // 旧レコードは公開済み扱い
         peerBadgeLevel: m['bl'] as int? ?? 0,
+        avatarUrl: m['av'] as String?,
       );
 
   static String encodeList(List<EncounterRecord> list) =>

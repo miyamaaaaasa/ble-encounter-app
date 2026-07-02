@@ -149,11 +149,16 @@ class _PlazaTile extends StatelessWidget {
               child: CircleAvatar(
                 radius: 22,
                 backgroundColor: color,
-                child: Text(initial,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16)),
+                backgroundImage: encounter.avatarUrl != null
+                    ? NetworkImage(encounter.avatarUrl!)
+                    : null,
+                child: encounter.avatarUrl == null
+                    ? Text(initial,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16))
+                    : null,
               ),
             ),
             const SizedBox(width: 12),

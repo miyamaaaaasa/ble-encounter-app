@@ -20,7 +20,9 @@ import '../services/piece_storage.dart';
 import '../services/scanner.dart';
 import '../services/profile_storage.dart';
 import '../services/notification_service.dart';
+import '../services/supabase_service.dart';
 import '../services/token_service.dart';
+import 'puzzle_providers.dart';
 
 // スキャン間隔プロバイダー（設定画面 → サイクルへ即時反映）
 final scanIntervalProvider = StateProvider<ScanInterval>((ref) => ScanInterval.two);
@@ -85,6 +87,7 @@ class AppNotifier extends Notifier<AppState> {
   bool   _cycleOnActive  = false;
   bool   _starting       = false;
   Timer? _cycleTimer;
+  Timer? _resolveTimer;   // 定期自動解析（電波解析ボタン不要化）
   ScanInterval _scanInterval = ScanInterval.two;
 
   StreamSubscription<EncounterEvent>?        _encounterSub;
@@ -288,8 +291,19 @@ class AppNotifier extends Notifier<AppState> {
       debugPrint('[App] cycle started peerId=${PeerId.hex}');
 
       _startCycle();
+      _startAutoResolve();
 
       await NotificationService.scheduleGateNotifications();
+
+      // バッジレベルをサーバーに同期（相手側の広場表示用）
+      final p = state.ownProfile;
+      if (p != null) {
+        SupabaseService.syncProfile(
+          displayName: p.name,
+          colorIndex:  p.colorIndex,
+          badgeLevel:  AppBadge.badgeLevelFrom(state.badges),
+        );
+      }
     } catch (e) {
       debugPrint('[App] start error: $e');
       state = state.copyWith(isRunning: false, errorMessage: '起動エラー: $e');
@@ -310,6 +324,40 @@ class AppNotifier extends Notifier<AppState> {
     _cycleActive = false;
     _cycleTimer?.cancel();
     _cycleTimer = null;
+    _resolveTimer?.cancel();
+    _resolveTimer = null;
+  }
+
+  // ─── 定期自動解析（サーバーファースト）────────────────────────────────
+  // 3分ごとに保留トークンをサーバーで解析。電波解析ボタンを押さなくても
+  // 広場・カケラコレクションが自動更新される。
+  void _startAutoResolve() {
+    _resolveTimer?.cancel();
+    _resolveTimer = Timer.periodic(const Duration(minutes: 3), (_) => _autoResolveNow());
+    // 起動直後にも一度実行（前回セッションの残りトークンを処理）
+    Future.delayed(const Duration(seconds: 5), _autoResolveNow);
+  }
+
+  Future<void> _autoResolveNow() async {
+    try {
+      final pending = await PendingScanStorage.getAllTokens();
+      if (pending.isEmpty) return;
+      debugPrint('[AutoResolve] ${pending.length} tokens pending...');
+      await ref.read(puzzleProvider.notifier).resolvePending(
+        onProfileResolved: (profile) {
+          upsertFromServerProfile(
+            peerId:     profile.userId,
+            name:       profile.displayName,
+            colorIndex: profile.colorIndex,
+            metAt:      profile.metAt,
+            badgeLevel: profile.badgeLevel,
+            avatarUrl:  profile.avatarUrl,
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint('[AutoResolve] error: $e');
+    }
   }
 
   // デバイスの時計に同期した「次の境界時刻まで」の待機時間を計算
@@ -427,6 +475,15 @@ class AppNotifier extends Notifier<AppState> {
       newlyEarnedBadges: newlyEarned,
     );
     await _storage.saveEncounters(list);
+
+    // バッジが増えたらサーバーにも反映（相手の広場に表示されるため）
+    if (newlyEarned.isNotEmpty && state.ownProfile != null) {
+      SupabaseService.syncProfile(
+        displayName: state.ownProfile!.name,
+        colorIndex:  state.ownProfile!.colorIndex,
+        badgeLevel:  AppBadge.badgeLevelFrom(updatedBadges),
+      );
+    }
   }
 
   // ─── Encounter ───────────────────────────────────────────────────────────
@@ -488,6 +545,7 @@ class AppNotifier extends Notifier<AppState> {
     required TemplateMessage template,
     required int rssi,
     int peerBadgeLevel = 0,
+    String? avatarUrl,
   }) async {
     final now  = DateTime.now();
     final list = List<EncounterRecord>.from(state.encounters);
@@ -509,6 +567,7 @@ class AppNotifier extends Notifier<AppState> {
         template:       template,
         isRevealed:     existing.isRevealed && existing.metToday,
         peerBadgeLevel: peerBadgeLevel > 0 ? peerBadgeLevel : existing.peerBadgeLevel,
+        avatarUrl:      avatarUrl ?? existing.avatarUrl,
       ));
     } else {
       list.insert(0, EncounterRecord(
@@ -522,6 +581,7 @@ class AppNotifier extends Notifier<AppState> {
         rssi:           rssi,
         template:       template,
         peerBadgeLevel: peerBadgeLevel,
+        avatarUrl:      avatarUrl,
       ));
     }
 
@@ -536,6 +596,8 @@ class AppNotifier extends Notifier<AppState> {
     required String name,
     required int colorIndex,
     required DateTime metAt,
+    int badgeLevel = 0,
+    String? avatarUrl,
   }) async {
     await _upsertEncounter(
       peerId: peerId,
@@ -544,6 +606,8 @@ class AppNotifier extends Notifier<AppState> {
       prefecture: -1,
       template: const TemplateMessage(),
       rssi: 0,
+      peerBadgeLevel: badgeLevel,
+      avatarUrl: avatarUrl,
     );
   }
 

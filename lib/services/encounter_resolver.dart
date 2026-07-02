@@ -9,12 +9,16 @@ class ResolvedProfile {
   final String displayName;
   final int colorIndex;
   final DateTime metAt;
+  final int badgeLevel;
+  final String? avatarUrl;
 
   const ResolvedProfile({
     required this.userId,
     required this.displayName,
     required this.colorIndex,
     required this.metAt,
+    this.badgeLevel = 0,
+    this.avatarUrl,
   });
 }
 
@@ -51,6 +55,8 @@ class EncounterResolver {
       final name      = r['display_name'] as String? ?? '???';
       final color     = (r['color_index'] as num?)?.toInt() ?? 0;
       final metAt     = await PendingScanStorage.scannedAtFor(token) ?? DateTime.now();
+      final badge     = (r['badge_level'] as num?)?.toInt() ?? 0;
+      final avatar    = r['avatar_url'] as String?;
 
       // サーバーファースト: 解析結果をコールバックで通知（EncounterRecord更新用）
       onProfileResolved?.call(ResolvedProfile(
@@ -58,6 +64,8 @@ class EncounterResolver {
         displayName: name,
         colorIndex: color,
         metAt: metAt,
+        badgeLevel: badge,
+        avatarUrl: avatar,
       ));
 
       final existIdx  = updated.indexWhere((p) => p.ownerId == ownerId);
@@ -85,12 +93,8 @@ class EncounterResolver {
         newPieces.add(np);
       }
 
-      // サーバー側にも収集記録（best-effort）
-      SupabaseService.recordCollectedPiece(
-        ownerId:       ownerId,
-        metAt:         metAt,
-        pieceSnapshot: piece.toJson(),
-      );
+      // DB使用量削減: piece_snapshot は users.piece_data と重複するため送信しない。
+      // 収集記録はローカル（PuzzlePieceStorage）にのみ保存する。
     }
 
     await PuzzlePieceStorage.save(updated);
