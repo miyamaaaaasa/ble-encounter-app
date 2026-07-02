@@ -3,6 +3,7 @@ import '../models/dot_avatar.dart';
 import '../models/piece_data.dart';
 import 'theme/palette.dart';
 import 'widgets/ui_kit.dart';
+import 'widgets/user_icon.dart';
 
 /// ドット絵アイコンエディタ（16x16 / 32x32）
 /// ペン・塗りつぶし・消しゴム・アンドゥ・即時プレビュー・保存
@@ -94,6 +95,7 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
 
   Future<void> _save() async {
     await DotAvatarStorage.save(_avatar);
+    OwnAvatarNotifier.update(_avatar); // 全画面のUserIconを即時更新
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('アイコンを保存しました！')),
@@ -106,7 +108,7 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
     return Scaffold(
       backgroundColor: Palette.cream,
       body: !_loaded
-          ? const Center(child: CircularProgressIndicator(color: Palette.coral))
+          ? Center(child: CircularProgressIndicator(color: Palette.coral))
           : Column(
               children: [
                 ScreenHeader(

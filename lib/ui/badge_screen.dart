@@ -64,7 +64,7 @@ class BadgeScreen extends ConsumerWidget {
           SliverToBoxAdapter(
             child: ScreenHeader(
               title: 'バッジずかん',
-              emoji: '🏅',
+              asset: 'assets/icons/tab_badge.png',
               trailing: StatChip(
                 emoji: '✨',
                 label: '${sorted.length}個',
@@ -86,10 +86,10 @@ class BadgeScreen extends ConsumerWidget {
                       children: [
                         const Text('🎯', style: TextStyle(fontSize: 22)),
                         const SizedBox(width: 8),
-                        const Text('つぎの目標', style: Ts.title),
+                        Text('つぎの目標', style: Ts.title),
                         const Spacer(),
                         Text('${next}人とすれ違う',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,
                                 color: Palette.sunDeep)),
@@ -113,9 +113,9 @@ class BadgeScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: SoftPanel(
-                  padding: const EdgeInsets.symmetric(vertical: 36),
+                  padding: EdgeInsets.symmetric(vertical: 36),
                   child: Column(
-                    children: const [
+                    children: [
                       Text('🏅', style: TextStyle(fontSize: 48)),
                       SizedBox(height: 12),
                       Text('まだバッジがありません', style: Ts.title),
@@ -218,7 +218,7 @@ class _BadgeCell extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 13, fontWeight: FontWeight.w800, color: Palette.ink)),
           const SizedBox(height: 3),
           Container(
@@ -259,7 +259,7 @@ class _RegionChip extends StatelessWidget {
               Text(emoji, style: const TextStyle(fontSize: 22)),
               const SizedBox(height: 4),
               Text(name,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: Palette.inkSoft)),

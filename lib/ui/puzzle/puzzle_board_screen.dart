@@ -73,7 +73,9 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
               child: Row(
                 children: [
-                  const Text('💎', style: TextStyle(fontSize: 26)),
+                  Image.asset('assets/icons/tab_kakera.png',
+                      width: 30, height: 30,
+                      filterQuality: FilterQuality.medium),
                   const SizedBox(width: 8),
                   const Expanded(
                     child: Text('カケラのよぞら',

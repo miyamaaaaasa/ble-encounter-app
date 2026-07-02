@@ -29,7 +29,17 @@ class BleForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> startForeground(NOTIFICATION_ID, buildNotification())
+            ACTION_START -> {
+                // BLE権限が未付与の端末（例: BLE非対応エミュレータ）で
+                // connectedDevice型FGSを起動するとSecurityExceptionでクラッシュする。
+                // 起動に失敗しても停止するだけにしてアプリ本体は生かす。
+                try {
+                    startForeground(NOTIFICATION_ID, buildNotification())
+                } catch (e: Exception) {
+                    android.util.Log.w("BleFgService", "startForeground failed: ${e.message}")
+                    stopSelf()
+                }
+            }
             ACTION_STOP  -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     stopForeground(STOP_FOREGROUND_REMOVE)

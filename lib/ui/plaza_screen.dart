@@ -8,6 +8,7 @@ import 'encounter_helpers.dart';
 import 'encounter_detail_sheet.dart';
 import 'theme/palette.dart';
 import 'widgets/ui_kit.dart';
+import 'widgets/user_icon.dart';
 
 // BGM トラック定義（音声ファイルは assets/bgm/ に配置してください）
 String bgmTrackFor(int total) {
@@ -50,11 +51,17 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
           SliverToBoxAdapter(
             child: ScreenHeader(
               title: 'みんなの広場',
-              emoji: '🏡',
-              trailing: StatChip(
-                emoji: '👥',
-                label: 'のべ $total人',
-                color: Palette.coral.withValues(alpha: 0.18),
+              asset: 'assets/icons/tab_plaza.png',
+              trailing: Row(
+                children: [
+                  const UserIcon(size: 30, radius: 8),
+                  const SizedBox(width: 8),
+                  StatChip(
+                    emoji: '👥',
+                    label: 'のべ $total人',
+                    color: Palette.coral.withValues(alpha: 0.18),
+                  ),
+                ],
               ),
             ),
           ),
@@ -108,7 +115,7 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text('${badges.length}個',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w800,
                                   color: Palette.lavenderDeep)),
@@ -140,7 +147,7 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text('${puzzle.pieces.length}枚',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w800,
                                   color: Palette.tealDeep)),
@@ -168,9 +175,9 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: SoftPanel(
-                  padding: const EdgeInsets.symmetric(vertical: 36),
+                  padding: EdgeInsets.symmetric(vertical: 36),
                   child: Column(
-                    children: const [
+                    children: [
                       Text('🌱', style: TextStyle(fontSize: 48)),
                       SizedBox(height: 12),
                       Text('まだ誰も来ていません', style: Ts.title),
@@ -246,7 +253,7 @@ class _RecentFace extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w600,
                     color: Palette.inkSoft),
@@ -319,7 +326,7 @@ class _ResidentTile extends StatelessWidget {
                       Flexible(
                         child: Text(encounter.name,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
                                 color: Palette.ink)),
@@ -341,7 +348,7 @@ class _ResidentTile extends StatelessWidget {
                       const SizedBox(width: 8),
                       // 再遭遇回数は抽象ラベルで表示（数字非公開）
                       Text(encounterLabel(encounter.meetCount),
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: Palette.tealDeep)),

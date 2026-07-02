@@ -4,6 +4,7 @@ import '../providers/ble_providers.dart';
 import '../services/notification_service.dart';
 import 'theme/palette.dart';
 import 'widgets/ui_kit.dart';
+import 'widgets/user_icon.dart';
 import 'today_screen.dart';
 import 'plaza_screen.dart';
 import 'minigame_screen.dart';
@@ -34,13 +35,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   ];
 
   static const _dockItems = [
-    DockItem('🌞', '今日'),
-    DockItem('🏡', '広場'),
-    DockItem('🎮', 'ゲーム'),
-    DockItem('🏅', 'バッジ'),
-    DockItem('💎', 'カケラ'),
-    DockItem('😊', 'じぶん'),
-    DockItem('⚙️', '設定'),
+    DockItem(asset: 'assets/icons/tab_today.png', label: '今日'),
+    DockItem(asset: 'assets/icons/tab_plaza.png', label: '広場'),
+    DockItem(asset: 'assets/icons/tab_game.png', label: 'ゲーム'),
+    DockItem(asset: 'assets/icons/tab_badge.png', label: 'バッジ'),
+    DockItem(asset: 'assets/icons/tab_kakera.png', label: 'カケラ'),
+    // じぶんタブはユーザー作成ドット絵（未作成時はデフォルトドット絵）
+    DockItem(custom: UserIcon(size: 26, radius: 7), label: 'じぶん'),
+    DockItem(asset: 'assets/icons/tab_settings.png', label: '設定'),
   ];
 
   @override

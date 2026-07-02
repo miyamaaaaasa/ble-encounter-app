@@ -4,9 +4,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/ble_config.dart';
 import '../providers/ble_providers.dart'
     show appProvider, scanIntervalProvider;
+import '../providers/theme_provider.dart';
 import '../services/data_export_service.dart';
 import '../services/game_storage.dart';
 import '../services/notification_service.dart';
+import 'onboarding_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -153,14 +155,60 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appProvider);
-    final si    = ref.watch(scanIntervalProvider);
+    final state     = ref.watch(appProvider);
+    final si        = ref.watch(scanIntervalProvider);
+    final themeMode = ref.watch(themeProvider);
 
     return CustomScrollView(
       slivers: [
         const SliverAppBar.large(title: Text('設定')),
         SliverList(
           delegate: SliverChildListDelegate([
+
+            // ─── 外観・ヘルプ ─────────────────────────────────────────────
+            _SectionHeader('外観・ヘルプ'),
+            ListTile(
+              leading: const Icon(Icons.dark_mode_outlined),
+              title: const Text('テーマ'),
+              subtitle: Text(switch (themeMode) {
+                ThemeMode.light => '昼の広場（ライト）',
+                ThemeMode.dark => '夜の広場（ダーク）',
+                ThemeMode.system => 'システムに合わせる',
+              }),
+              trailing: DropdownButton<ThemeMode>(
+                value: themeMode,
+                items: const [
+                  DropdownMenuItem(
+                      value: ThemeMode.light,
+                      child: Text('☀️ 昼', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(
+                      value: ThemeMode.dark,
+                      child: Text('🌙 夜', style: TextStyle(fontSize: 13))),
+                  DropdownMenuItem(
+                      value: ThemeMode.system,
+                      child: Text('📱 自動', style: TextStyle(fontSize: 13))),
+                ],
+                onChanged: (v) {
+                  if (v != null) ref.read(themeProvider.notifier).set(v);
+                },
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.school_outlined),
+              title: const Text('チュートリアルをもう一度見る'),
+              subtitle: const Text('アプリの遊びかたをおさらい'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  fullscreenDialog: true,
+                  builder: (ctx) => OnboardingScreen(
+                    onDone: () => Navigator.pop(ctx),
+                  ),
+                ),
+              ),
+            ),
+
+            const Divider(indent: 16, endIndent: 16),
 
             // ─── BLE ─────────────────────────────────────────────────────
             _SectionHeader('BLE 通信'),

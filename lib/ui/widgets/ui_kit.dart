@@ -8,7 +8,7 @@ import '../theme/palette.dart';
 class SoftPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  final Color color;
+  final Color? color;
   final Color? shadowTint;
   final VoidCallback? onTap;
   final double radius;
@@ -17,7 +17,7 @@ class SoftPanel extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.color = Palette.card,
+    this.color,
     this.shadowTint,
     this.onTap,
     this.radius = 22,
@@ -29,7 +29,7 @@ class SoftPanel extends StatelessWidget {
       duration: const Duration(milliseconds: 120),
       padding: padding,
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? Palette.card,
         borderRadius: BorderRadius.circular(radius),
         boxShadow: Palette.lift(shadowTint),
       ),
@@ -80,8 +80,8 @@ class ChunkyButton extends StatelessWidget {
   final String label;
   final IconData? icon;
   final String? emoji;
-  final Color color;
-  final Color deepColor;
+  final Color? color;
+  final Color? deepColor;
   final Color labelColor;
   final VoidCallback? onTap;
   final bool expand;
@@ -91,8 +91,8 @@ class ChunkyButton extends StatelessWidget {
     required this.label,
     this.icon,
     this.emoji,
-    this.color = Palette.coral,
-    this.deepColor = Palette.coralDeep,
+    this.color,
+    this.deepColor,
     this.labelColor = Colors.white,
     this.onTap,
     this.expand = true,
@@ -105,10 +105,14 @@ class ChunkyButton extends StatelessWidget {
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 22),
       decoration: BoxDecoration(
-        color: enabled ? color : Palette.inkFaint,
+        color: enabled ? (color ?? Palette.coral) : Palette.inkFaint,
         borderRadius: BorderRadius.circular(26),
         boxShadow: enabled
-            ? [BoxShadow(color: deepColor, offset: const Offset(0, 4))]
+            ? [
+                BoxShadow(
+                    color: deepColor ?? Palette.coralDeep,
+                    offset: const Offset(0, 4))
+              ]
             : null,
       ),
       child: Row(
@@ -140,12 +144,12 @@ class ChunkyButton extends StatelessWidget {
 class RoundIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  final Color color;
+  final Color? color;
   const RoundIconButton({
     super.key,
     required this.icon,
     required this.onTap,
-    this.color = Palette.card,
+    this.color,
   });
 
   @override
@@ -156,7 +160,7 @@ class RoundIconButton extends StatelessWidget {
         width: 42,
         height: 42,
         decoration: BoxDecoration(
-          color: color,
+          color: color ?? Palette.card,
           shape: BoxShape.circle,
           boxShadow: Palette.lift(),
         ),
@@ -170,6 +174,7 @@ class RoundIconButton extends StatelessWidget {
 class ScreenHeader extends StatelessWidget {
   final String title;
   final String? emoji;
+  final String? asset; // 正式ピクセルアイコン優先
   final Widget? trailing;
   final Widget? below;
 
@@ -177,6 +182,7 @@ class ScreenHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.emoji,
+    this.asset,
     this.trailing,
     this.below,
   });
@@ -192,7 +198,11 @@ class ScreenHeader extends StatelessWidget {
           children: [
             Row(
               children: [
-                if (emoji != null) ...[
+                if (asset != null) ...[
+                  Image.asset(asset!, width: 30, height: 30,
+                      filterQuality: FilterQuality.medium),
+                  const SizedBox(width: 8),
+                ] else if (emoji != null) ...[
                   Text(emoji!, style: const TextStyle(fontSize: 26)),
                   const SizedBox(width: 8),
                 ],
@@ -231,7 +241,7 @@ class SpeechBubble extends StatelessWidget {
         child: Text(
           text,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 13, fontWeight: FontWeight.w600, color: Palette.ink),
         ),
       ),
@@ -273,12 +283,12 @@ class _BubblePainter extends CustomPainter {
 class StatChip extends StatelessWidget {
   final String emoji;
   final String label;
-  final Color color;
+  final Color? color;
   const StatChip({
     super.key,
     required this.emoji,
     required this.label,
-    this.color = Palette.creamDeep,
+    this.color,
   });
 
   @override
@@ -286,7 +296,7 @@ class StatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? Palette.creamDeep,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -295,7 +305,7 @@ class StatChip extends StatelessWidget {
           Text(emoji, style: const TextStyle(fontSize: 14)),
           const SizedBox(width: 5),
           Text(label,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12, fontWeight: FontWeight.w700, color: Palette.ink)),
         ],
       ),
@@ -329,9 +339,11 @@ class SectionLabel extends StatelessWidget {
 
 // ─── ゲーム機ドック（NavigationBarの代替）───────────────────────────────────
 class DockItem {
-  final String emoji;
+  final String? asset;   // 正式ピクセルアイコン（assets/icons/）
+  final Widget? custom;  // カスタムウィジェット（じぶんタブのドット絵など）
   final String label;
-  const DockItem(this.emoji, this.label);
+  const DockItem({this.asset, this.custom, required this.label})
+      : assert(asset != null || custom != null);
 }
 
 class GameDock extends StatelessWidget {
@@ -381,8 +393,21 @@ class GameDock extends StatelessWidget {
                         scale: sel ? 1.22 : 1.0,
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutBack,
-                        child: Text(items[i].emoji,
-                            style: const TextStyle(fontSize: 21)),
+                        child: SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: items[i].custom ??
+                              Image.asset(
+                                items[i].asset!,
+                                filterQuality: FilterQuality.medium,
+                                // 非選択時は少し沈んだ色味に
+                                color: sel
+                                    ? null
+                                    : Palette.inkSoft.withValues(alpha: 0.55),
+                                colorBlendMode:
+                                    sel ? null : BlendMode.srcATop,
+                              ),
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -408,12 +433,12 @@ class GameDock extends StatelessWidget {
 // ─── 進捗バー（丸っこい）────────────────────────────────────────────────────
 class CandyProgress extends StatelessWidget {
   final double value; // 0..1
-  final Color color;
+  final Color? color;
   final double height;
   const CandyProgress({
     super.key,
     required this.value,
-    this.color = Palette.sun,
+    this.color,
     this.height = 14,
   });
 
@@ -433,7 +458,7 @@ class CandyProgress extends StatelessWidget {
             heightFactor: 1,
             child: Container(
               decoration: BoxDecoration(
-                color: color,
+                color: color ?? Palette.sun,
                 borderRadius: BorderRadius.circular(height / 2),
               ),
             ),

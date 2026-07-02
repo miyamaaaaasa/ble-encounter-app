@@ -76,11 +76,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     return '$hour:00';
   }
 
-  String _gateEmoji(int hour) {
-    if (hour == 9) return '🌅';
-    if (hour == 12) return '☀️';
-    if (hour == 21) return '🌙';
-    return '🔔';
+  String _gateAsset(int hour) {
+    if (hour == 9) return 'assets/gate/gate_morning.png';
+    if (hour == 12) return 'assets/gate/gate_noon.png';
+    return 'assets/gate/gate_night.png';
   }
 
   @override
@@ -120,7 +119,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           SliverToBoxAdapter(
             child: ScreenHeader(
               title: 'きょうの広場',
-              emoji: '🌞',
+              asset: 'assets/icons/tab_today.png',
               trailing: _ScanBadge(running: state.isRunning, si: si),
             ),
           ),
@@ -134,7 +133,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   color: Palette.sun.withValues(alpha: 0.25),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: const Row(
+                  child: Row(
                     children: [
                       Text('👋', style: TextStyle(fontSize: 22)),
                       SizedBox(width: 10),
@@ -177,7 +176,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: _GatePanel(
-                      emoji: _gateEmoji(gate.hour),
+                      asset: _gateAsset(gate.hour),
                       label: _gateLabel(gate.hour),
                       hour: gate.hour,
                       isOpen: isOpen,
@@ -317,7 +316,7 @@ class _MeetingPlazaState extends State<_MeetingPlaza> {
         const SizedBox(height: 4),
         // 人数
         Text('今日は ${people.length}人 と出会いました',
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 14, fontWeight: FontWeight.w800, color: Palette.ink)),
         const SizedBox(height: 10),
 
@@ -375,7 +374,7 @@ class _MeetingPlazaState extends State<_MeetingPlaza> {
             key: ValueKey('name$centerIdx'),
             children: [
               Text(center.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
                       color: Palette.ink)),
@@ -383,6 +382,11 @@ class _MeetingPlazaState extends State<_MeetingPlaza> {
               Text(
                 '${center.template.statusText} · ${encounterLabel(center.meetCount)}',
                 style: Ts.caption,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '🕐 ${center.lastMet.hour.toString().padLeft(2, '0')}:${center.lastMet.minute.toString().padLeft(2, '0')} にすれ違い',
+                style: Ts.tiny,
               ),
             ],
           ),
@@ -465,7 +469,7 @@ class _PlazaPerson extends StatelessWidget {
 
 // ─── 開門ゲートパネル ────────────────────────────────────────────────────────
 class _GatePanel extends StatelessWidget {
-  final String emoji;
+  final String asset;
   final String label;
   final int hour;
   final bool isOpen;
@@ -475,7 +479,7 @@ class _GatePanel extends StatelessWidget {
   final VoidCallback onReveal;
 
   const _GatePanel({
-    required this.emoji,
+    required this.asset,
     required this.label,
     required this.hour,
     required this.isOpen,
@@ -500,13 +504,19 @@ class _GatePanel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 28)),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(asset,
+                width: 44, height: 44,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium),
+          ),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('$labelの開門',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: Palette.ink)),
@@ -542,7 +552,7 @@ class _GatePanel extends StatelessWidget {
                       const Text('⏳', style: TextStyle(fontSize: 14)),
                       const SizedBox(width: 6),
                       Text('$rh:$rm:$rs',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: Palette.inkSoft,
@@ -592,7 +602,7 @@ class _HistoryTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(encounter.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 13.5,
                           color: Palette.ink)),
@@ -601,7 +611,7 @@ class _HistoryTile extends StatelessWidget {
               ),
             ),
             Text(encounterLabel(encounter.meetCount),
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: Palette.inkSoft)),
@@ -662,7 +672,7 @@ class _SwipeCardScreenState extends State<_SwipeCardScreen> {
                 Text('今日は $total 人と出会いました！',
                     style: Ts.heading, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                const Text('広場に追加されました', style: Ts.caption),
+                Text('広場に追加されました', style: Ts.caption),
                 const SizedBox(height: 40),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 60),
@@ -722,10 +732,10 @@ class _SwipeCardScreenState extends State<_SwipeCardScreen> {
               right: 16,
               child: TextButton.icon(
                 onPressed: _skipAll,
-                icon: const Icon(Icons.fast_forward,
+                icon: Icon(Icons.fast_forward,
                     size: 16, color: Palette.inkSoft),
                 label:
-                    const Text('スキップ', style: TextStyle(color: Palette.inkSoft)),
+                    Text('スキップ', style: TextStyle(color: Palette.inkSoft)),
               ),
             ),
           ],
@@ -902,7 +912,7 @@ class _EncounterCard extends StatelessWidget {
             onTap: onNext,
           ),
           const SizedBox(height: 8),
-          const Text('← スワイプでも操作できます →', style: Ts.tiny),
+          Text('← スワイプでも操作できます →', style: Ts.tiny),
         ],
       ),
     );
@@ -957,7 +967,7 @@ BoxDecoration _rarityCardBackground(CardRarity r, BuildContext context) {
         ),
       );
     case CardRarity.common:
-      return const BoxDecoration(color: Palette.card);
+      return BoxDecoration(color: Palette.card);
   }
 }
 

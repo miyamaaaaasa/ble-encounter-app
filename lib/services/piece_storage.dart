@@ -64,12 +64,10 @@ class PendingScanStorage {
   static Future<void> add(String token, DateTime at) async {
     final existing = await load();
     if (existing.any((s) => s.token == token)) return; // 重複スキップ
-    // 48時間以上前のものは捨てる
-    final cutoff = DateTime.now().subtract(const Duration(hours: 48));
-    final trimmed = [
-      ...existing.where((s) => s.at.isAfter(cutoff)),
-      _PendingScan(token: token, at: at),
-    ];
+    // 仕様: ユーザーが開門して確認するまで時間経過では削除しない。
+    // （削除はサーバー解析成功時の removeTokens のみ。容量保護の上限だけ設ける）
+    final all = [...existing, _PendingScan(token: token, at: at)];
+    final trimmed = all.length > 2000 ? all.sublist(all.length - 2000) : all;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(trimmed.map((s) => s.toMap()).toList()));
   }

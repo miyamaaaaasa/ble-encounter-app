@@ -87,7 +87,7 @@ class _MinigameScreenState extends ConsumerState<MinigameScreen> {
         children: [
           ScreenHeader(
             title: 'ゲームセンター',
-            emoji: '🎮',
+            asset: 'assets/icons/tab_game.png',
             trailing: gameEncounters.isNotEmpty
                 ? StatChip(
                     emoji: '🧑‍🤝‍🧑',
@@ -136,7 +136,7 @@ class _MinigameScreenState extends ConsumerState<MinigameScreen> {
                 color: Palette.creamDeep,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: const Row(
+                child: Row(
                   children: [
                     Text('💡', style: TextStyle(fontSize: 18)),
                     SizedBox(width: 10),
