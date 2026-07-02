@@ -23,11 +23,18 @@ class SupabaseService {
   static String? get userId => _c.auth.currentUser?.id;
   static bool get isReady   => userId != null;
 
+  // セッション失効時に自動で匿名再認証する（長時間稼働対策）
+  static Future<bool> _ready() async {
+    if (isReady) return true;
+    await _ensureAuth();
+    return isReady;
+  }
+
   // ─── Token ───────────────────────────────────────────────────────
 
   // サーバーで新トークンを発行（24時間有効）
   static Future<String?> issueToken() async {
-    if (!isReady) return null;
+    if (!await _ready()) return null;
     try {
       final res = await _c.rpc('issue_token');
       return res as String?;
@@ -40,7 +47,11 @@ class SupabaseService {
   // 収集したトークンリストをユーザー情報に解析。
   // 通信エラー時は null を返す（[] と区別し、呼び出し側でトークンを保持させる）
   static Future<List<Map<String, dynamic>>?> resolveTokens(List<String> tokens) async {
-    if (!isReady || tokens.isEmpty) return isReady ? [] : null;
+    if (tokens.isEmpty) return [];
+    if (!await _ready()) {
+      debugPrint('[Supabase] resolveTokens: auth not ready (will retry)');
+      return null;
+    }
     try {
       final res = await _c.rpc('resolve_tokens', params: {'token_list': tokens});
       return (res as List).cast<Map<String, dynamic>>();
@@ -59,7 +70,7 @@ class SupabaseService {
     List<int>? piecePixels,
     int? badgeLevel,
   }) async {
-    if (!isReady) return;
+    if (!await _ready()) return;
     try {
       await _c.from('users').upsert({
         'id':           userId,
@@ -77,7 +88,7 @@ class SupabaseService {
 
   // ピースデータを保存
   static Future<bool> savePieceData(List<int> pixels) async {
-    if (!isReady) return false;
+    if (!await _ready()) return false;
     try {
       await _c.from('users').upsert({'id': userId, 'piece_data': pixels});
       return true;
