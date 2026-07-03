@@ -7,6 +7,7 @@ import '../providers/puzzle_providers.dart';
 import 'encounter_helpers.dart';
 import 'encounter_detail_sheet.dart';
 import 'theme/palette.dart';
+import 'widgets/plaza_scene.dart';
 import 'widgets/ui_kit.dart';
 import 'widgets/user_icon.dart';
 
@@ -66,32 +67,18 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
             ),
           ),
 
-          // ─── ここ最近の仲間（横スクロール）─────────────────────
-          if (revealed.isNotEmpty) ...[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-                child: SectionLabel('👋', 'さいきん来た人'),
+          // ─── 広場シーン（住民が集まる空間・レベルで発展）───────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+              child: PlazaScene(
+                residents: revealed,
+                totalCount: total,
+                onTapResident: (e) =>
+                    EncounterDetailSheet.show(context, e),
               ),
             ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 92,
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: revealed.take(12).length,
-                  itemBuilder: (ctx, i) {
-                    final e = revealed[i];
-                    return _RecentFace(
-                      encounter: e,
-                      onTap: () => EncounterDetailSheet.show(context, e),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
+          ),
 
           // ─── コレクション状況（バッジ＆カケラ）────────────────
           SliverToBoxAdapter(
@@ -199,68 +186,6 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
 
           const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
         ],
-      ),
-    );
-  }
-}
-
-// ─── 最近の顔（横スクロール）──────────────────────────────────────────────────
-class _RecentFace extends StatelessWidget {
-  final EncounterRecord encounter;
-  final VoidCallback onTap;
-  const _RecentFace({required this.encounter, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final color =
-        Palette.pastelAvatars[encounter.colorIndex % Palette.pastelAvatars.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        child: Column(
-          children: [
-            Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                boxShadow: Palette.lift(),
-                image: encounter.avatarUrl != null
-                    ? DecorationImage(
-                        image: NetworkImage(encounter.avatarUrl!),
-                        fit: BoxFit.cover)
-                    : null,
-              ),
-              child: encounter.avatarUrl == null
-                  ? Center(
-                      child: Text(initial,
-                          style: const TextStyle(
-                              fontSize: 22,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800)))
-                  : null,
-            ),
-            const SizedBox(height: 5),
-            SizedBox(
-              width: 60,
-              child: Text(
-                encounter.name,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: Palette.inkSoft),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -228,6 +228,17 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 }
 
+/// あいまいな出会い時間帯ラベル（正確な時刻・場所は出さない）
+String _fuzzyMetLabel(DateTime t) {
+  final diff = DateTime.now().difference(t);
+  if (diff.inMinutes < 60) return '✨ さっき すれ違ったよ';
+  final h = t.hour;
+  if (h >= 5 && h < 10) return '🌅 あさ すれ違ったよ';
+  if (h >= 10 && h < 16) return '☀️ ひるま すれ違ったよ';
+  if (h >= 16 && h < 19) return '🌇 ゆうがた すれ違ったよ';
+  return '🌙 よる すれ違ったよ';
+}
+
 // ─── スキャン状態バッジ ──────────────────────────────────────────────────────
 class _ScanBadge extends StatelessWidget {
   final bool running;
@@ -256,9 +267,12 @@ class _MeetingPlaza extends StatefulWidget {
   State<_MeetingPlaza> createState() => _MeetingPlazaState();
 }
 
-class _MeetingPlazaState extends State<_MeetingPlaza> {
+class _MeetingPlazaState extends State<_MeetingPlaza>
+    with SingleTickerProviderStateMixin {
   late final PageController _ctrl;
+  late final AnimationController _bob; // ぷるぷる待機アニメ
   double _page = 0;
+  bool _celebrate = false; // 新しい出会いの祝福演出
 
   @override
   void initState() {
@@ -267,11 +281,28 @@ class _MeetingPlazaState extends State<_MeetingPlaza> {
       ..addListener(() {
         if (mounted) setState(() => _page = _ctrl.page ?? 0);
       });
+    _bob = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1800))
+      ..repeat();
+  }
+
+  @override
+  void didUpdateWidget(_MeetingPlaza old) {
+    super.didUpdateWidget(old);
+    // 新規ユーザー出現 → 祝福演出（2.5秒）
+    if (widget.people.length > old.people.length && old.people.isNotEmpty ||
+        (old.people.isEmpty && widget.people.isNotEmpty)) {
+      setState(() => _celebrate = true);
+      Future.delayed(const Duration(milliseconds: 2500), () {
+        if (mounted) setState(() => _celebrate = false);
+      });
+    }
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _bob.dispose();
     super.dispose();
   }
 
@@ -314,8 +345,8 @@ class _MeetingPlazaState extends State<_MeetingPlaza> {
     return Column(
       children: [
         const SizedBox(height: 4),
-        // 人数
-        Text('今日は ${people.length}人 と出会いました',
+        // 人数（出会いの祝福トーン）
+        Text('きょうは ${people.length}人 と出会えたよ 🎊',
             style: TextStyle(
                 fontSize: 14, fontWeight: FontWeight.w800, color: Palette.ink)),
         const SizedBox(height: 10),
@@ -330,40 +361,83 @@ class _MeetingPlazaState extends State<_MeetingPlaza> {
         ),
         const SizedBox(height: 2),
 
-        // 円弧カルーセル
+        // 円弧カルーセル（祝福演出をスタック）
         SizedBox(
           height: 168,
-          child: PageView.builder(
-            controller: _ctrl,
-            itemCount: people.length,
-            itemBuilder: (ctx, i) {
-              final delta = (i - _page);
-              final dist = delta.abs();
-              // 中央が大きく、離れるほど小さく＆下に沈む（円弧）
-              final scale = (1.0 - dist * 0.28).clamp(0.55, 1.0);
-              final dy = pow(dist, 1.5) * 34.0;
-              final opacity = (1.0 - dist * 0.35).clamp(0.35, 1.0);
+          child: Stack(
+            children: [
+              PageView.builder(
+                controller: _ctrl,
+                itemCount: people.length,
+                itemBuilder: (ctx, i) {
+                  final delta = (i - _page);
+                  final dist = delta.abs();
+                  // 中央が大きく、離れるほど小さく＆下に沈む（円弧）
+                  final scale = (1.0 - dist * 0.28).clamp(0.55, 1.0);
+                  final dy = pow(dist, 1.5) * 34.0;
+                  final opacity = (1.0 - dist * 0.35).clamp(0.35, 1.0);
 
-              return Transform.translate(
-                offset: Offset(0, dy),
-                child: Transform.scale(
-                  scale: scale,
-                  child: Opacity(
-                    opacity: opacity,
-                    child: _PlazaPerson(
-                      encounter: people[i],
-                      isCenter: i == centerIdx,
-                      onTap: () {
-                        if (i == centerIdx) return;
-                        _ctrl.animateToPage(i,
-                            duration: const Duration(milliseconds: 350),
-                            curve: Curves.easeOutCubic);
-                      },
+                  return AnimatedBuilder(
+                    animation: _bob,
+                    builder: (_, child) {
+                      // ぷるぷる待機: 各人が少しずつ違う位相でゆれる
+                      final bobDy =
+                          sin(_bob.value * 2 * pi + i * 1.3) * 2.5;
+                      return Transform.translate(
+                        offset: Offset(0, dy + bobDy),
+                        child: child,
+                      );
+                    },
+                    child: Transform.scale(
+                      scale: scale,
+                      child: Opacity(
+                        opacity: opacity,
+                        child: _PlazaPerson(
+                          encounter: people[i],
+                          isCenter: i == centerIdx,
+                          onTap: () {
+                            if (i == centerIdx) return;
+                            _ctrl.animateToPage(i,
+                                duration: const Duration(milliseconds: 350),
+                                curve: Curves.easeOutCubic);
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              // ─── 新しい出会いの祝福 ─────────────────────────
+              IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _celebrate ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Center(
+                    child: AnimatedScale(
+                      scale: _celebrate ? 1.0 : 0.6,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.elasticOut,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Palette.sun,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: Palette.liftBig(Palette.sunDeep),
+                        ),
+                        child: const Text(
+                          '🎉 あたらしい出会い！',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              );
-            },
+              ),
+            ],
           ),
         ),
 
@@ -384,10 +458,8 @@ class _MeetingPlazaState extends State<_MeetingPlaza> {
                 style: Ts.caption,
               ),
               const SizedBox(height: 2),
-              Text(
-                '🕐 ${center.lastMet.hour.toString().padLeft(2, '0')}:${center.lastMet.minute.toString().padLeft(2, '0')} にすれ違い',
-                style: Ts.tiny,
-              ),
+              // プライバシー配慮: 正確な時刻は出さず、あいまいな時間帯だけ伝える
+              Text(_fuzzyMetLabel(center.lastMet), style: Ts.tiny),
             ],
           ),
         ),
