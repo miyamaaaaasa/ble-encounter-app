@@ -58,3 +58,7 @@ app.*.map.json
 # Sensitive / local configs
 **/local.properties
 **/.env
+
+# リリース署名（公開リポジトリに含めない）
+android/key.properties
+android/keystore/
