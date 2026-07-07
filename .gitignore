@@ -62,3 +62,4 @@ app.*.map.json
 # リリース署名（公開リポジトリに含めない）
 android/key.properties
 android/keystore/
+qa_out/
