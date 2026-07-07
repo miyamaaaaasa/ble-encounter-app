@@ -22,6 +22,18 @@ if [ -f "$APK" ]; then
   A install -r "$APK" >/dev/null 2>&1 && echo "installed" || echo "install skipped (signature/err)"
 fi
 
+# 1.5) バージョン照合ゲート:
+# インストール失敗を見逃して「古いAPKをQAして合格」する事故を防ぐ。
+WANT=$(grep -o '^version: [0-9.]*' pubspec.yaml | awk '{print $2}')
+GOT=$(A shell dumpsys package com.example.ble_encounter 2>/dev/null \
+      | grep -o 'versionName=[0-9.]*' | head -1 | cut -d= -f2)
+if [ -n "$WANT" ] && [ "$WANT" != "$GOT" ]; then
+  echo "NG: VERSION MISMATCH device=$GOT expected=$WANT"
+  echo "    (署名不一致の可能性。adb uninstall 後に再実行してください)"
+  exit 1
+fi
+echo "version on device: $GOT ✓"
+
 # 2) ログをクリアして起動
 A logcat -c 2>/dev/null
 A shell am force-stop com.example.ble_encounter

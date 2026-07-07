@@ -10,7 +10,8 @@
 ## QAゲート（コミット前に必ず通す）
 
 ```
-Gate1 静的     flutter analyze エラー0（tool/dev.ps1 check）
+Gate0 レビュー  AIコードレビュー（下記チェックリスト。差分に対して実施）
+Gate1 静的     flutter analyze エラー0（tool/dev.ps1 check）＋ flutter test 全パス
 Gate2 起動     qa_smoke.sh: プロセス生存 + FATAL/Exception 0件
 Gate3 巡回     qa_smoke.sh の7タブスクショをAIが読解し下表を適用
 Gate4 回帰     変更領域に応じた重点確認（下記マトリクス）
@@ -48,6 +49,24 @@ Gate2/3 で NG → 修正して Gate1 からやり直し。コミットしない
 - [ ] カケラ画面は昼夜共通の夜空でOK
 
 ---
+
+## Gate0: AIコードレビュー チェックリスト（コミット前・差分対象）
+
+| 観点 | 具体チェック |
+|---|---|
+| null安全 | `!` 強制解放の根拠 / fromMap系のnull・型違い耐性（不正入力→フォールバック） |
+| 永続化漏れ | 新しいユーザー状態は save + 起動時 load + `_v1`キー命名になっているか。メモリだけに置いていないか |
+| BLE影響 | scanner/advertiser/cycle への変更は _cycleOnActive ガード・_emittedPeers（爆増防止）・token-only payload を壊していないか |
+| 状態管理 | setStateの範囲は最小か（全画面毎秒rebuild禁止）。Notifierのstate直接mutate禁止（copyWith） |
+| 非同期 | await後の `mounted` チェック / Future内のsetState前ガード / 多重実行ガード（isResolving等） |
+| パフォーマンス | 毎フレーム/毎秒処理は対象Widgetを最小化（AnimatedBuilder/専用StatefulWidget化）。build内での重い計算・I/O禁止 |
+| メモリリーク | Timer/AnimationController/StreamSubscription/PageController は dispose必須。static ValueNotifierは意図の明記 |
+| 世界観 | 正確な時刻/位置表現・Material部品・ハードコード色（Palette外）の混入なし |
+
+実績: このゲートで検出→修正済みの例
+- 祝福演出が起動時ストレージ復元でも発火（didUpdateWidgetの条件不備）→ _warmup導入
+- Today全画面が毎秒rebuild（_clockTimer）→ _CountdownText分離で該当Textのみ更新
+- 住民の向き反転がイニシャルを鏡文字化 → 画像のみflip
 
 ## Gate4: 変更領域別 回帰マトリクス
 

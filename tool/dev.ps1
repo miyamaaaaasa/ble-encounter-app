@@ -45,7 +45,8 @@ function Invoke-Build {
         Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
         $out = flutter build apk --release 2>&1
     }
-    $ok = $out | Select-String "√|Built build"
+    # 注意: "√"はcp932コンソールで化けるためASCIIパターンのみで判定する
+    $ok = $out | Select-String "Built build"
     if ($ok) { Write-Host "OK: $ok" -ForegroundColor Green }
     else { $out | Select-String "Error|FAILED" | Select-Object -First 10; exit 1 }
 }
@@ -82,13 +83,45 @@ function Invoke-Changelog {
     Write-Host "CHANGELOG.md regenerated" -ForegroundColor Green
 }
 
+function Invoke-Test {
+    Write-Host "== flutter test (回帰スイート) ==" -ForegroundColor Cyan
+    $out = flutter test 2>&1
+    $last = $out | Select-Object -Last 1
+    if ($last -match "All tests passed") { Write-Host "OK: $last" -ForegroundColor Green }
+    else { $out | Select-Object -Last 15; Write-Host "NG: tests failed" -ForegroundColor Red; exit 1 }
+}
+
+function Invoke-Release {
+    # Phase2: Version更新→PubGet→Analyze→Test→Build→CHANGELOG→Commit→Push→APK出力
+    # コミットメッセージ: -Serial 引数を流用しない。$env:RELEASE_MSG か自動生成。
+    Invoke-Bump
+    flutter pub get | Out-Null
+    Invoke-Check
+    Invoke-Test
+    Invoke-Build
+    Invoke-Changelog
+    $ver = (Select-String -Path pubspec.yaml -Pattern "^version: (.+)$").Matches[0].Groups[1].Value
+    $msg = if ($env:RELEASE_MSG) { "beta${ver}: $env:RELEASE_MSG" } else { "beta${ver}: release build" }
+    $tmp = New-TemporaryFile
+    "$msg`n`nCo-Authored-By: Claude <noreply@anthropic.com>" | Set-Content $tmp -Encoding utf8
+    git add -A
+    git commit -F $tmp.FullName
+    git push origin main
+    Remove-Item $tmp -ErrorAction SilentlyContinue
+    $apk = Resolve-Path "build\app\outputs\flutter-apk\app-release.apk"
+    Write-Host "RELEASE DONE: beta$ver" -ForegroundColor Green
+    Write-Host "APK: $apk"
+}
+
 switch ($Cmd) {
     "check"     { Invoke-Check }
+    "test"      { Invoke-Test }
     "bump"      { Invoke-Bump }
     "build"     { Invoke-Build }
     "deploy"    { Invoke-Deploy }
     "logs"      { Invoke-Logs }
     "changelog" { Invoke-Changelog }
-    "cycle"     { Invoke-Check; Invoke-Bump; Invoke-Build; Invoke-Deploy; Start-Sleep 6; Invoke-Logs }
-    default     { Write-Host "usage: dev.ps1 <check|bump|build|deploy|logs|changelog|cycle> [serial]" }
+    "cycle"     { Invoke-Check; Invoke-Test; Invoke-Bump; Invoke-Build; Invoke-Deploy; Start-Sleep 6; Invoke-Logs }
+    "release"   { Invoke-Release }
+    default     { Write-Host "usage: dev.ps1 <check|test|bump|build|deploy|logs|changelog|cycle|release> [serial]`n  release: `$env:RELEASE_MSG='summary' を設定するとコミットメッセージに反映" }
 }

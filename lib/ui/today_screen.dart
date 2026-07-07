@@ -28,7 +28,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   @override
   void initState() {
     super.initState();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    // パフォーマンス: 秒毎の全画面rebuildをやめ、30秒毎の状態同期のみ行う。
+    // 秒針カウントダウンは _CountdownText が自前で更新し、
+    // 開門瞬間は onDone コールバックで即時反映する。
+    _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
   }
@@ -170,8 +173,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   final isOpen = kGateAlwaysOpen || now.isAfter(gate);
                   final unrev = enc.where((e) => !e.isRevealed).toList();
                   final revCount = enc.where((e) => e.isRevealed).length;
-                  final remaining =
-                      isOpen ? Duration.zero : gate.difference(now);
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -180,7 +181,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       label: _gateLabel(gate.hour),
                       hour: gate.hour,
                       isOpen: isOpen,
-                      remaining: remaining,
+                      gateTime: gate,
+                      onGateOpen: () {
+                        if (mounted) setState(() {});
+                      },
                       revCount: revCount,
                       unrevCount: unrev.length,
                       onReveal: () {
@@ -273,6 +277,7 @@ class _MeetingPlazaState extends State<_MeetingPlaza>
   late final AnimationController _bob; // ぷるぷる待機アニメ
   double _page = 0;
   bool _celebrate = false; // 新しい出会いの祝福演出
+  bool _warmup = true; // 起動直後のストレージ復元を「新しい出会い」と誤認しない
 
   @override
   void initState() {
@@ -284,14 +289,16 @@ class _MeetingPlazaState extends State<_MeetingPlaza>
     _bob = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1800))
       ..repeat();
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) _warmup = false;
+    });
   }
 
   @override
   void didUpdateWidget(_MeetingPlaza old) {
     super.didUpdateWidget(old);
-    // 新規ユーザー出現 → 祝福演出（2.5秒）
-    if (widget.people.length > old.people.length && old.people.isNotEmpty ||
-        (old.people.isEmpty && widget.people.isNotEmpty)) {
+    // 新規ユーザー出現 → 祝福演出（2.5秒）。起動直後の復元ロードでは出さない
+    if (!_warmup && widget.people.length > old.people.length) {
       setState(() => _celebrate = true);
       Future.delayed(const Duration(milliseconds: 2500), () {
         if (mounted) setState(() => _celebrate = false);
@@ -545,7 +552,8 @@ class _GatePanel extends StatelessWidget {
   final String label;
   final int hour;
   final bool isOpen;
-  final Duration remaining;
+  final DateTime gateTime;
+  final VoidCallback onGateOpen;
   final int revCount;
   final int unrevCount;
   final VoidCallback onReveal;
@@ -555,7 +563,8 @@ class _GatePanel extends StatelessWidget {
     required this.label,
     required this.hour,
     required this.isOpen,
-    required this.remaining,
+    required this.gateTime,
+    required this.onGateOpen,
     required this.revCount,
     required this.unrevCount,
     required this.onReveal,
@@ -564,9 +573,6 @@ class _GatePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hh = hour.toString().padLeft(2, '0');
-    final rh = remaining.inHours.toString().padLeft(2, '0');
-    final rm = (remaining.inMinutes % 60).toString().padLeft(2, '0');
-    final rs = (remaining.inSeconds % 60).toString().padLeft(2, '0');
     final hasUnrev = unrevCount > 0;
 
     return SoftPanel(
@@ -623,18 +629,64 @@ class _GatePanel extends StatelessWidget {
                     children: [
                       const Text('⏳', style: TextStyle(fontSize: 14)),
                       const SizedBox(width: 6),
-                      Text('$rh:$rm:$rs',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Palette.inkSoft,
-                              fontFeatures: [FontFeature.tabularFigures()])),
+                      _CountdownText(target: gateTime, onDone: onGateOpen),
                     ],
                   ),
           ),
         ],
       ),
     );
+  }
+}
+
+/// カウントダウン専用Widget。
+/// 自前の1秒タイマーでこのTextだけを更新し、画面全体のrebuildを避ける。
+/// 0になったら onDone で親に通知して開門状態へ切り替える。
+class _CountdownText extends StatefulWidget {
+  final DateTime target;
+  final VoidCallback onDone;
+  const _CountdownText({required this.target, required this.onDone});
+
+  @override
+  State<_CountdownText> createState() => _CountdownTextState();
+}
+
+class _CountdownTextState extends State<_CountdownText> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (DateTime.now().isAfter(widget.target)) {
+        _timer?.cancel();
+        widget.onDone(); // 開門の瞬間だけ親をrebuild
+      } else {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = widget.target.difference(DateTime.now());
+    final r = remaining.isNegative ? Duration.zero : remaining;
+    final rh = r.inHours.toString().padLeft(2, '0');
+    final rm = (r.inMinutes % 60).toString().padLeft(2, '0');
+    final rs = (r.inSeconds % 60).toString().padLeft(2, '0');
+    return Text('$rh:$rm:$rs',
+        style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Palette.inkSoft,
+            fontFeatures: const [FontFeature.tabularFigures()]));
   }
 }
 

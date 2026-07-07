@@ -63,3 +63,4 @@ app.*.map.json
 android/key.properties
 android/keystore/
 qa_out/
+qa_baseline/
