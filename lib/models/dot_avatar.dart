@@ -37,6 +37,20 @@ class DotAvatar {
     }
   }
 
+  /// サーバー同期用の16x16画素列（users.piece_data 互換）。
+  /// 32x32の場合は間引き縮小する。これにより「じぶんアイコン」が
+  /// すれ違った相手側の Today/広場/カケラ で表示される。
+  List<int> toPiecePixels() {
+    if (size == 16) return List<int>.from(pixels);
+    final out = List<int>.filled(256, 15);
+    for (int y = 0; y < 16; y++) {
+      for (int x = 0; x < 16; x++) {
+        out[y * 16 + x] = getPixel(x * size ~/ 16, y * size ~/ 16);
+      }
+    }
+    return out;
+  }
+
   Map<String, dynamic> toMap() => {'s': size, 'p': pixels};
 
   static DotAvatar fromMap(Map<String, dynamic> m) {

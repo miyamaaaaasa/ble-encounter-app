@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../models/encounter_record.dart';
 import '../theme/palette.dart';
+import 'peer_icon.dart';
 import 'ui_kit.dart';
 import 'user_icon.dart';
 
@@ -54,6 +55,9 @@ class _PlazaSceneState extends State<PlazaScene>
   late final AnimationController _bob;
   int _talkerIdx = -1; // いまおしゃべり中の住民
   final _rng = Random();
+  // 新規住民フェードイン: 前回表示していた住民ID
+  Set<String> _knownIds = {};
+  final Set<String> _fadingIn = {};
 
   @override
   void initState() {
@@ -61,7 +65,23 @@ class _PlazaSceneState extends State<PlazaScene>
     _bob = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 2000))
       ..repeat();
+    _knownIds = widget.residents.take(8).map((e) => e.peerId).toSet();
     _scheduleTalk();
+  }
+
+  @override
+  void didUpdateWidget(PlazaScene old) {
+    super.didUpdateWidget(old);
+    // 新しく広場に来た住民をふわっと登場させる（過剰演出はしない）
+    final current = widget.residents.take(8).map((e) => e.peerId).toSet();
+    final newcomers = current.difference(_knownIds);
+    if (newcomers.isNotEmpty && _knownIds.isNotEmpty) {
+      setState(() => _fadingIn.addAll(newcomers));
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) setState(() => _fadingIn.removeAll(newcomers));
+      });
+    }
+    _knownIds = current;
   }
 
   void _scheduleTalk() {
@@ -137,12 +157,18 @@ class _PlazaSceneState extends State<PlazaScene>
                         child: child!,
                       );
                     },
-                    child: _Resident(
-                      encounter: shown[i],
-                      size: size,
-                      faceLeft: faceLeft,
-                      talking: i == _talkerIdx,
-                      onTap: () => widget.onTapResident(shown[i]),
+                    child: AnimatedOpacity(
+                      // 新規住民はふわっと現れる
+                      opacity: _fadingIn.contains(shown[i].peerId) ? 0.15 : 1.0,
+                      duration: const Duration(milliseconds: 800),
+                      curve: Curves.easeOut,
+                      child: _Resident(
+                        encounter: shown[i],
+                        size: size,
+                        faceLeft: faceLeft,
+                        talking: i == _talkerIdx,
+                        onTap: () => widget.onTapResident(shown[i]),
+                      ),
                     ),
                   );
                 }),
@@ -280,28 +306,25 @@ class _Resident extends StatelessWidget {
               ),
             ),
           ),
-          // 体（向き変更は画像アバターのみ反転。文字は鏡文字にしない）
+          // 体: ドット絵住民（白枠の角丸ドット絵。向きはPeerIcon側で安全に反転）
           Container(
-            width: size,
-            height: size,
+            padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2.5),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(size * 0.28),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    offset: const Offset(0, 2)),
+              ],
             ),
-            clipBehavior: Clip.antiAlias,
-            child: encounter.avatarUrl != null
-                ? Transform.flip(
-                    flipX: faceLeft,
-                    child: Image.network(encounter.avatarUrl!,
-                        fit: BoxFit.cover),
-                  )
-                : Center(
-                    child: Text(initial,
-                        style: TextStyle(
-                            fontSize: size * 0.42,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800))),
+            child: PeerIcon(
+              encounter: encounter,
+              size: size - 4,
+              circle: false,
+              radius: size * 0.22,
+              flipX: faceLeft,
+            ),
           ),
           // 足元の影
           Container(

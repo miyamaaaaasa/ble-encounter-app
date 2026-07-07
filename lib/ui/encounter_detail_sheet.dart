@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/app_badge.dart';
 import '../models/encounter_record.dart';
 import 'encounter_helpers.dart';
+import 'widgets/peer_icon.dart';
 
 class EncounterDetailSheet extends StatelessWidget {
   final EncounterRecord encounter;
@@ -48,22 +49,11 @@ class EncounterDetailSheet extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 52,
-                    backgroundColor: color,
-                    backgroundImage: encounter.avatarUrl != null
-                        ? NetworkImage(encounter.avatarUrl!)
-                        : null,
-                    child: encounter.avatarUrl == null
-                        ? Text(
-                            initial,
-                            style: const TextStyle(
-                                fontSize: 44,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold),
-                          )
-                        : null,
-                  ),
+                  PeerIcon(
+                      encounter: encounter,
+                      size: 104,
+                      circle: false,
+                      radius: 20),
                   const SizedBox(height: 16),
                   Text(
                     encounter.name,

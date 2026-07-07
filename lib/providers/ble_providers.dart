@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/ble_config.dart';
 import '../core/peer_id.dart';
 import '../models/app_badge.dart';
+import '../models/dot_avatar.dart';
 import '../models/own_profile.dart';
 import '../models/encounter_record.dart';
 import '../models/template_message.dart';
@@ -172,6 +173,28 @@ class AppNotifier extends Notifier<AppState> {
       badges = await _migrateBadges(badges: badges, encounters: encounters);
     }
 
+    // ドット絵補完: カケラに保存済みの相手の絵を名簿(EncounterRecord)へ移す。
+    // v1.7.7以前に出会った人にも即ドット絵が表示されるようにする一回きりの移行。
+    final piecesForPatch = await PuzzlePieceStorage.load();
+    if (piecesForPatch.isNotEmpty) {
+      bool patched = false;
+      encounters = encounters.map((e) {
+        if (e.peerPixels == null) {
+          final match =
+              piecesForPatch.where((p) => p.ownerId == e.peerId).firstOrNull;
+          if (match != null && !match.piece.isEmpty) {
+            patched = true;
+            return e.withPixels(match.piece.toJson());
+          }
+        }
+        return e;
+      }).toList();
+      if (patched) {
+        await _storage.saveEncounters(encounters);
+        debugPrint('[App] backfilled peer dot-art from kakera cache');
+      }
+    }
+
     state = state.copyWith(
       isLoading:  false,
       ownProfile: profile,
@@ -179,6 +202,8 @@ class AppNotifier extends Notifier<AppState> {
       badges:     badges,
     );
     if (profile != null) {
+      // BLEの成否に関わらずドット絵・プロフィールはサーバーへ同期する
+      _syncProfileToServer();
       // Defer BLE start until after the UI has rendered the home screen.
       await Future.delayed(const Duration(milliseconds: 300));
       await _autoStart();
@@ -205,6 +230,23 @@ class AppNotifier extends Notifier<AppState> {
   Future<void> _autoStart() async {
     final ok = await requestPermissions();
     if (ok) await start();
+  }
+
+  // 名前・バッジ・ドット絵のサーバー同期。
+  // BLEが起動できない状態（BT off等）でもドット絵は相手に届くべきなので
+  // start() とは独立に _loadData からも呼ぶ。失敗しても次回起動で再送。
+  Future<void> _syncProfileToServer() async {
+    final p = state.ownProfile;
+    if (p == null) return;
+    final dotAvatar = await DotAvatarStorage.load();
+    SupabaseService.syncProfile(
+      displayName: p.name,
+      colorIndex:  p.colorIndex,
+      badgeLevel:  AppBadge.badgeLevelFrom(state.badges),
+      piecePixels: (dotAvatar != null && !dotAvatar.isEmpty)
+          ? dotAvatar.toPiecePixels()
+          : null,
+    );
   }
 
   // ─── Profile ─────────────────────────────────────────────────────────────
@@ -299,15 +341,8 @@ class AppNotifier extends Notifier<AppState> {
       // 未送信のアイコンがあれば自動アップロード（初回設定時オフライン対策）
       AvatarService.retryPendingUpload();
 
-      // バッジレベルをサーバーに同期（相手側の広場表示用）
-      final p = state.ownProfile;
-      if (p != null) {
-        SupabaseService.syncProfile(
-          displayName: p.name,
-          colorIndex:  p.colorIndex,
-          badgeLevel:  AppBadge.badgeLevelFrom(state.badges),
-        );
-      }
+      // バッジレベル＋ドット絵をサーバーに同期（相手側の Today/広場/カケラ表示用）
+      _syncProfileToServer();
     } catch (e) {
       debugPrint('[App] start error: $e');
       state = state.copyWith(isRunning: false, errorMessage: '起動エラー: $e');
@@ -375,6 +410,7 @@ class AppNotifier extends Notifier<AppState> {
             metAt:      profile.metAt,
             badgeLevel: profile.badgeLevel,
             avatarUrl:  profile.avatarUrl,
+            pixels:     profile.pixels,
           );
         },
       );
@@ -569,6 +605,7 @@ class AppNotifier extends Notifier<AppState> {
     required int rssi,
     int peerBadgeLevel = 0,
     String? avatarUrl,
+    List<int>? peerPixels,
   }) async {
     final now  = DateTime.now();
     final list = List<EncounterRecord>.from(state.encounters);
@@ -591,6 +628,7 @@ class AppNotifier extends Notifier<AppState> {
         isRevealed:     existing.isRevealed && existing.metToday,
         peerBadgeLevel: peerBadgeLevel > 0 ? peerBadgeLevel : existing.peerBadgeLevel,
         avatarUrl:      avatarUrl ?? existing.avatarUrl,
+        peerPixels:     peerPixels ?? existing.peerPixels, // ドット絵は最新を保持
       ));
     } else {
       list.insert(0, EncounterRecord(
@@ -605,6 +643,7 @@ class AppNotifier extends Notifier<AppState> {
         template:       template,
         peerBadgeLevel: peerBadgeLevel,
         avatarUrl:      avatarUrl,
+        peerPixels:     peerPixels,
       ));
     }
 
@@ -622,6 +661,7 @@ class AppNotifier extends Notifier<AppState> {
     required DateTime metAt,
     int badgeLevel = 0,
     String? avatarUrl,
+    List<int>? pixels,
   }) async {
     await _upsertEncounter(
       peerId: peerId,
@@ -632,6 +672,7 @@ class AppNotifier extends Notifier<AppState> {
       rssi: 0,
       peerBadgeLevel: badgeLevel,
       avatarUrl: avatarUrl,
+      peerPixels: pixels,
     );
   }
 

@@ -17,6 +17,9 @@ class EncounterRecord {
   final int peerBadgeLevel;
   // 相手のアバター画像URL（サーバー解析で取得）
   final String? avatarUrl;
+  // 相手のドット絵（16x16=256画素・サーバー解析で取得し端末にキャッシュ）
+  // 本アプリ最大のUGC。表示優先度は peerPixels > avatarUrl > イニシャル
+  final List<int>? peerPixels;
 
   const EncounterRecord({
     required this.peerId,
@@ -31,6 +34,7 @@ class EncounterRecord {
     this.isRevealed = false,
     this.peerBadgeLevel = 0,
     this.avatarUrl,
+    this.peerPixels,
   });
 
   bool get metToday {
@@ -69,6 +73,24 @@ class EncounterRecord {
         isRevealed: isRevealed && metToday,
         peerBadgeLevel: peerBadgeLevel ?? this.peerBadgeLevel,
         avatarUrl: avatarUrl ?? this.avatarUrl,
+        peerPixels: peerPixels,
+      );
+
+  // ドット絵キャッシュだけ差し替えた複製（カケラ→名簿の補完マイグレーション用）
+  EncounterRecord withPixels(List<int> pixels) => EncounterRecord(
+        peerId: peerId,
+        name: name,
+        colorIndex: colorIndex,
+        prefecture: prefecture,
+        firstMet: firstMet,
+        lastMet: lastMet,
+        meetCount: meetCount,
+        rssi: rssi,
+        template: template,
+        isRevealed: isRevealed,
+        peerBadgeLevel: peerBadgeLevel,
+        avatarUrl: avatarUrl,
+        peerPixels: pixels,
       );
 
   // 結果演出完了時に呼ぶ
@@ -85,6 +107,7 @@ class EncounterRecord {
         isRevealed: true,
         peerBadgeLevel: peerBadgeLevel,
         avatarUrl: avatarUrl,
+        peerPixels: peerPixels,
       );
 
   Map<String, dynamic> toMap() => {
@@ -103,6 +126,7 @@ class EncounterRecord {
         'rv': isRevealed,
         'bl': peerBadgeLevel,
         if (avatarUrl != null) 'av': avatarUrl,
+        if (peerPixels != null) 'px': peerPixels,
       };
 
   static EncounterRecord fromMap(Map<String, dynamic> m) => EncounterRecord(
@@ -123,6 +147,7 @@ class EncounterRecord {
         isRevealed: m['rv'] as bool? ?? true, // 旧レコードは公開済み扱い
         peerBadgeLevel: m['bl'] as int? ?? 0,
         avatarUrl: m['av'] as String?,
+        peerPixels: (m['px'] as List?)?.map((e) => (e as num).toInt()).toList(),
       );
 
   static String encodeList(List<EncounterRecord> list) =>

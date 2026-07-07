@@ -8,6 +8,7 @@ import '../providers/ble_providers.dart'
     show appProvider, AppState, AppNotifier, scanIntervalProvider;
 import 'encounter_helpers.dart';
 import 'theme/palette.dart';
+import 'widgets/peer_icon.dart';
 import 'widgets/ui_kit.dart';
 
 /// 今日タブ = アプリの顔。
@@ -489,24 +490,18 @@ class _PlazaPerson extends StatelessWidget {
   Widget build(BuildContext context) {
     final color =
         Palette.pastelAvatars[encounter.colorIndex % Palette.pastelAvatars.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
 
     return GestureDetector(
       onTap: onTap,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // ドット絵を主役に: 相手の作品を大きく・にじませず表示
           Container(
-            width: 96,
-            height: 96,
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isCenter ? Colors.white : Colors.transparent,
-                width: 4,
-              ),
+              color: isCenter ? Colors.white : Colors.white70,
+              borderRadius: BorderRadius.circular(22),
               boxShadow: isCenter
                   ? [
                       BoxShadow(
@@ -515,20 +510,13 @@ class _PlazaPerson extends StatelessWidget {
                           spreadRadius: 2)
                     ]
                   : Palette.lift(),
-              image: encounter.avatarUrl != null
-                  ? DecorationImage(
-                      image: NetworkImage(encounter.avatarUrl!),
-                      fit: BoxFit.cover)
-                  : null,
             ),
-            child: encounter.avatarUrl == null
-                ? Center(
-                    child: Text(initial,
-                        style: const TextStyle(
-                            fontSize: 38,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800)))
-                : null,
+            child: PeerIcon(
+              encounter: encounter,
+              size: 96,
+              circle: false,
+              radius: 18,
+            ),
           ),
           // 足元の影（地面に立っている感）
           Container(
@@ -697,29 +685,13 @@ class _HistoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        Palette.pastelAvatars[encounter.colorIndex % Palette.pastelAvatars.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: SoftPanel(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: color,
-              backgroundImage: encounter.avatarUrl != null
-                  ? NetworkImage(encounter.avatarUrl!)
-                  : null,
-              child: encounter.avatarUrl == null
-                  ? Text(initial,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold))
-                  : null,
-            ),
+            PeerIcon(encounter: encounter, size: 38, circle: false, radius: 10),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -934,9 +906,12 @@ class _EncounterCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 24),
+                      // 開封の主役はドット絵。白台座に大きく飾る
                       Container(
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(26),
                           boxShadow: [
                             BoxShadow(
                                 color: color.withValues(alpha: 0.5),
@@ -944,20 +919,11 @@ class _EncounterCard extends StatelessWidget {
                                 spreadRadius: 6),
                           ],
                         ),
-                        child: CircleAvatar(
-                          radius: 56,
-                          backgroundColor: color,
-                          backgroundImage: encounter.avatarUrl != null
-                              ? NetworkImage(encounter.avatarUrl!)
-                              : null,
-                          child: encounter.avatarUrl == null
-                              ? Text(initial,
-                                  style: const TextStyle(
-                                      fontSize: 48,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold))
-                              : null,
-                        ),
+                        child: PeerIcon(
+                            encounter: encounter,
+                            size: 116,
+                            circle: false,
+                            radius: 20),
                       ),
                       const SizedBox(height: 20),
                       Text(

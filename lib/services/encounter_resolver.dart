@@ -11,6 +11,7 @@ class ResolvedProfile {
   final DateTime metAt;
   final int badgeLevel;
   final String? avatarUrl;
+  final List<int>? pixels; // 相手のドット絵（16x16）
 
   const ResolvedProfile({
     required this.userId,
@@ -19,6 +20,7 @@ class ResolvedProfile {
     required this.metAt,
     this.badgeLevel = 0,
     this.avatarUrl,
+    this.pixels,
   });
 }
 
@@ -73,6 +75,7 @@ class EncounterResolver {
         metAt: metAt,
         badgeLevel: badge,
         avatarUrl: avatar,
+        pixels: piece.isEmpty ? null : piece.toJson(), // ドット絵キャッシュ
       ));
 
       final existIdx  = updated.indexWhere((p) => p.ownerId == ownerId);

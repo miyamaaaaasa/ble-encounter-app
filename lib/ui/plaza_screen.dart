@@ -7,6 +7,7 @@ import '../providers/puzzle_providers.dart';
 import 'encounter_helpers.dart';
 import 'encounter_detail_sheet.dart';
 import 'theme/palette.dart';
+import 'widgets/peer_icon.dart';
 import 'widgets/plaza_scene.dart';
 import 'widgets/ui_kit.dart';
 import 'widgets/user_icon.dart';
@@ -198,10 +199,6 @@ class _ResidentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        Palette.pastelAvatars[encounter.colorIndex % Palette.pastelAvatars.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
     final rarity = cardRarityOf(encounter.meetCount);
     final border = rarityBorderColor(rarity);
 
@@ -212,10 +209,11 @@ class _ResidentTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
+            // レアリティ枠の中にドット絵（主役）
             Container(
               padding: const EdgeInsets.all(2.5),
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(14),
                 gradient: rarity == CardRarity.hologram
                     ? const LinearGradient(colors: [
                         Color(0xFFFF6B6B),
@@ -226,20 +224,8 @@ class _ResidentTile extends StatelessWidget {
                     : null,
                 color: rarity != CardRarity.hologram ? border : null,
               ),
-              child: CircleAvatar(
-                radius: 21,
-                backgroundColor: color,
-                backgroundImage: encounter.avatarUrl != null
-                    ? NetworkImage(encounter.avatarUrl!)
-                    : null,
-                child: encounter.avatarUrl == null
-                    ? Text(initial,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15))
-                    : null,
-              ),
+              child: PeerIcon(
+                  encounter: encounter, size: 42, circle: false, radius: 11),
             ),
             const SizedBox(width: 12),
             Expanded(

@@ -135,4 +135,42 @@ void main() {
       expect(r.first.meetCount, 2);
     });
   });
+
+  group('ドット絵同期（Sprint A）', () {
+    test('DotAvatar.toPiecePixels: 16x16はそのまま256画素', () {
+      final a = DotAvatar(size: 16);
+      a.setPixel(2, 3, 9);
+      final px = a.toPiecePixels();
+      expect(px.length, 256);
+      expect(px[3 * 16 + 2], 9);
+    });
+
+    test('DotAvatar.toPiecePixels: 32x32は16x16へ間引き縮小', () {
+      final a = DotAvatar(size: 32);
+      // (0,0)ブロックを赤(4)に
+      a.setPixel(0, 0, 4);
+      final px = a.toPiecePixels();
+      expect(px.length, 256);
+      expect(px[0], 4); // 左上は保持される
+    });
+
+    test('EncounterRecord.peerPixels がシリアライズ往復で保持される', () {
+      final pixels = List<int>.generate(256, (i) => i % 16);
+      final e = EncounterRecord(
+        peerId: 'p',
+        name: 'N',
+        colorIndex: 0,
+        firstMet: DateTime(2026, 7, 4),
+        lastMet: DateTime(2026, 7, 4),
+        meetCount: 1,
+        rssi: -60,
+        peerPixels: pixels,
+      );
+      final r = EncounterRecord.fromMap(e.toMap());
+      expect(r.peerPixels, pixels);
+      // reveal() でも失われない（永続化漏れ防止）
+      expect(r.reveal().peerPixels, pixels);
+    });
+  });
+
 }
