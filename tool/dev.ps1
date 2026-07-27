@@ -108,10 +108,13 @@ function Invoke-Release {
     git commit -F $tmp.FullName
     git push origin main
     Remove-Item $tmp -ErrorAction SilentlyContinue
+    # Obsidian vault へ資料・履歴を同期（記録の自動化）
+    python tool/obsidian_sync.py --session $msg
     $apk = Resolve-Path "build\app\outputs\flutter-apk\app-release.apk"
     Write-Host "RELEASE DONE: beta$ver" -ForegroundColor Green
     Write-Host "APK: $apk"
 }
+
 
 switch ($Cmd) {
     "check"     { Invoke-Check }
@@ -123,5 +126,6 @@ switch ($Cmd) {
     "changelog" { Invoke-Changelog }
     "cycle"     { Invoke-Check; Invoke-Test; Invoke-Bump; Invoke-Build; Invoke-Deploy; Start-Sleep 6; Invoke-Logs }
     "release"   { Invoke-Release }
-    default     { Write-Host "usage: dev.ps1 <check|test|bump|build|deploy|logs|changelog|cycle|release> [serial]`n  release: `$env:RELEASE_MSG='summary' を設定するとコミットメッセージに反映" }
+    "obsidian"  { python tool/obsidian_sync.py }
+    default     { Write-Host "usage: dev.ps1 <check|test|bump|build|deploy|logs|changelog|cycle|release|obsidian> [serial]`n  release: `$env:RELEASE_MSG='summary' を設定するとコミットメッセージに反映`n  obsidian: Obsidian vault へ資料同期" }
 }
