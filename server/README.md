@@ -223,8 +223,14 @@ docker run --rm caddy:2-alpine caddy hash-password --plaintext '<新しいパス
 Web画面を使わず、同じAPIを叩けばよい。GPIOのボタン入力などに繋げる想定。
 
 ```bash
-curl -u admin:<パスワード>   -X POST https://153-125-148-69.sslip.io/admin/broadcast   -H "X-Admin-Token: <ADMIN_TOKEN>"   -H "Content-Type: application/json"   -d '{"title":"開会のお知らせ","body":"まもなく始まります"}'
+curl -u admin:<パスワード>   -X POST https://153-125-148-69.sslip.io/admin/broadcast   -H "X-Admin-Token: <ADMIN_TOKEN>"   -H "Content-Type: application/json; charset=utf-8"   --data-binary @payload.json
 ```
+
+**日本語を送る場合の注意**: `-d '{"title":"開会のお知らせ"}'` のように
+コマンドラインへ直接書くと、Windowsのコンソール（Git Bash等）では文字コードが
+CP932のまま送信され、**DBに文字化けが保存される**（実際に踏んだ）。
+必ずUTF-8で保存したJSONファイルを `--data-binary @file` で渡すこと。
+ブラウザの管理画面から送る場合は常にUTF-8なのでこの問題は起きない。
 
 ### デプロイ
 
