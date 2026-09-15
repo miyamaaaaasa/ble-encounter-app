@@ -154,7 +154,10 @@ class ApiService {
   /// 通信エラー時は null（呼び出し側が既読IDを進めないようにするため、
   /// 成功して0件の [] とは区別する）。
   static Future<List<Map<String, dynamic>>?> fetchBroadcasts(int sinceId) async {
-    if (!isReady) return null; // 未登録時は黙って諦める（起動直後など）
+    // 起動直後は init() がまだ完了しておらず isReady が false になり得る。
+    // そこで諦めると次のポーリング（2分後）まで何も出ず、配信直後に
+    // アプリを開いた利用者に届かない。他APIと同様に準備完了を待つ。
+    if (!await _ready()) return null;
     try {
       final res = await http
           .get(Uri.parse('$apiBaseUrl/broadcasts?since=$sinceId'),

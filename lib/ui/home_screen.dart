@@ -9,6 +9,7 @@ import 'today_screen.dart';
 import 'plaza_screen.dart';
 import 'minigame_screen.dart';
 import 'coming_soon_screen.dart';
+import '../providers/broadcast_provider.dart';
 import '../core/ble_config.dart';
 import 'badge_screen.dart';
 import 'profile_screen.dart';
@@ -76,6 +77,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (!appState.isRunning && appState.ownProfile != null) {
         ref.read(appProvider.notifier).start();
       }
+      // 復帰時に運営のお知らせを即取得する。定期ポーリング(2分)だけだと
+      // 「配信 → 来場者がアプリを開く」の流れで最大2分待たせてしまう。
+      ref.read(broadcastProvider.notifier).refresh();
     }
   }
 
