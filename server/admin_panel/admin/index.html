@@ -9,56 +9,185 @@
   /* 背景色をクリームで固定しているので、フォーム部品だけOSのダークモードに
      引きずられて黒くなるのを防ぐ（黒地に黒文字で入力内容が読めなくなる）。 */
   :root { color-scheme: light; }
+  * { box-sizing: border-box; }
   body {
     font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
-    max-width: 480px; margin: 40px auto; padding: 0 20px;
+    max-width: 760px; margin: 0 auto; padding: 20px 16px 60px;
     background: #FBF3E4; color: #4A3C31;
   }
-  h1 { font-size: 18px; }
-  label { display: block; margin-top: 16px; font-size: 13px; font-weight: bold; }
+  h1 { font-size: 17px; margin: 0 0 14px; }
+
+  /* ─── タブ ─── */
+  .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .tabs button {
+    flex: 1; padding: 10px 6px; border: 1px solid #e0d3bd; border-radius: 10px;
+    background: #FFFDF8; color: #8A7A6B; font-size: 13px; font-weight: bold;
+    cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] {
+    background: #FF8A70; color: #fff; border-color: #FF8A70;
+  }
+  section[hidden] { display: none; }
+
+  /* ─── カード ─── */
+  .card {
+    background: #FFFDF8; border: 1px solid #efe3ce; border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .card h2 { font-size: 13px; margin: 0 0 10px; color: #8A7A6B; font-weight: bold; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+  .stat { text-align: center; }
+  .stat .num { font-size: 22px; font-weight: bold; }
+  .stat .lbl { font-size: 11px; color: #8A7A6B; margin-top: 2px; }
+
+  /* ─── 使用率バー ─── */
+  .meter { margin-bottom: 12px; }
+  .meter:last-child { margin-bottom: 0; }
+  .meter .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+  .meter .bar { height: 8px; background: #EFE3CE; border-radius: 4px; overflow: hidden; }
+  .meter .fill { height: 100%; background: #5FC9B5; transition: width .4s; }
+  .meter .fill.warn { background: #FFC85C; }
+  .meter .fill.crit { background: #E96D52; }
+
+  /* ─── 入力 ─── */
+  label { display: block; margin-top: 14px; font-size: 13px; font-weight: bold; }
   input, textarea {
-    width: 100%; box-sizing: border-box; padding: 10px; margin-top: 6px;
+    width: 100%; padding: 10px; margin-top: 6px;
     border: 1px solid #d8c9b3; border-radius: 8px; font-size: 15px;
     background: #FFFDF8; color: #4A3C31;   /* 明示しないとダークモードで潰れる */
   }
   input::placeholder, textarea::placeholder { color: #BFB0A0; }
   input:focus, textarea:focus { outline: 2px solid #FF8A70; outline-offset: 1px; }
   textarea { resize: vertical; min-height: 70px; }
-  button {
-    margin-top: 20px; width: 100%; padding: 12px; border: none; border-radius: 10px;
+  .counter { text-align: right; font-size: 11px; color: #8A7A6B; }
+
+  button.action {
+    margin-top: 14px; width: 100%; padding: 12px; border: none; border-radius: 10px;
     background: #FF8A70; color: white; font-size: 15px; font-weight: bold; cursor: pointer;
   }
-  button:disabled { opacity: 0.5; }
-  #status { margin-top: 14px; font-size: 13px; white-space: pre-wrap; }
-  #history { margin-top: 28px; font-size: 12px; color: #8A7A6B; }
-  .counter { text-align: right; font-size: 11px; color: #8A7A6B; }
+  button.action.sub { background: #5FC9B5; }
+  button.action:disabled { opacity: .5; cursor: default; }
+  .status { margin-top: 12px; font-size: 13px; white-space: pre-wrap; }
+  .muted { font-size: 11.5px; color: #8A7A6B; line-height: 1.6; }
+
+  /* ─── 利用者一覧 ─── */
+  .users { display: grid; grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); gap: 10px; }
+  .user { display: flex; gap: 10px; align-items: flex-start;
+          background: #FFFDF8; border: 1px solid #efe3ce; border-radius: 10px; padding: 10px; }
+  .user canvas { width: 56px; height: 56px; image-rendering: pixelated;
+                 border-radius: 8px; background: #F3E7D3; flex: none; }
+  .user .name { font-size: 13px; font-weight: bold; word-break: break-all; }
+  .user .meta { font-size: 10.5px; color: #8A7A6B; margin-top: 3px; line-height: 1.5; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+         background: #BFB0A0; margin-right: 4px; vertical-align: middle; }
+  .dot.on { background: #06D6A0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td { padding: 4px 0; }
+  td.r { text-align: right; color: #8A7A6B; }
 </style>
 </head>
 <body>
-  <h1>📣 お知らせ配信</h1>
-  <p style="font-size:13px;color:#8A7A6B">
-    ここから送信すると、アプリを起動している利用者全員の「きょうの広場」に
-    バナー表示されます（アプリを完全に閉じている間は届きません）。
-  </p>
+  <h1>はじめましてこんにちは — 管理者パネル</h1>
 
-  <label>管理者トークン
+  <label style="margin-top:0">管理者トークン
     <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
   </label>
 
-  <label>タイトル（40文字まで）
-    <input id="title" maxlength="40" placeholder="例: 開会のお知らせ">
-  </label>
-  <div class="counter"><span id="titleCount">0</span>/40</div>
+  <div class="tabs" role="tablist">
+    <button id="tabDash" role="tab" aria-selected="true">📊 状況</button>
+    <button id="tabUsers" role="tab" aria-selected="false">👥 利用者</button>
+    <button id="tabSend" role="tab" aria-selected="false">📣 配信</button>
+  </div>
 
-  <label>本文（200文字まで）
-    <textarea id="body" maxlength="200" placeholder="例: まもなくステージが始まります！"></textarea>
-  </label>
-  <div class="counter"><span id="bodyCount">0</span>/200</div>
+  <!-- ══════════ 状況 ══════════ -->
+  <section id="secDash">
+    <div class="card">
+      <h2>アクティブ利用者</h2>
+      <div class="grid">
+        <div class="stat"><div class="num" id="a5">–</div><div class="lbl">今いる（5分以内）</div></div>
+        <div class="stat"><div class="num" id="a1h">–</div><div class="lbl">1時間以内</div></div>
+        <div class="stat"><div class="num" id="a24">–</div><div class="lbl">24時間以内</div></div>
+        <div class="stat"><div class="num" id="utotal">–</div><div class="lbl">登録者数</div></div>
+      </div>
+    </div>
 
-  <button id="send">送信する</button>
-  <div id="status"></div>
+    <div class="card">
+      <h2>サーバーの負荷（ホスト全体）</h2>
+      <div class="meter"><div class="row"><span>CPU</span><span id="cpuTxt">–</span></div>
+        <div class="bar"><div class="fill" id="cpuBar" style="width:0%"></div></div></div>
+      <div class="meter"><div class="row"><span>メモリ</span><span id="memTxt">–</span></div>
+        <div class="bar"><div class="fill" id="memBar" style="width:0%"></div></div></div>
+      <div class="meter"><div class="row"><span>ディスク</span><span id="diskTxt">–</span></div>
+        <div class="bar"><div class="fill" id="diskBar" style="width:0%"></div></div></div>
+      <p class="muted" style="margin:10px 0 0">
+        友人と共有しているサーバー全体の数値です。このアプリ以外の使用分も含みます。
+      </p>
+    </div>
 
-  <div id="history"></div>
+    <div class="status" id="dashStatus"></div>
+
+    <div class="card">
+      <h2>バックアップ</h2>
+      <table id="backupList"><tr><td class="muted">読み込み中…</td></tr></table>
+      <button class="action sub" id="backupBtn">いますぐバックアップを作る</button>
+      <div class="status" id="backupStatus"></div>
+      <p class="muted" style="margin:10px 0 0">
+        このボタンで作るのは<b>サーバー内の複製</b>です。
+        Google Driveへの退避は毎日4:10に自動で行われます（暗号化・30世代）。
+        サーバーごと失う事態に備えるのはDrive側の分なので、
+        当日いきなり必要になる類のものではありません。
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>その他</h2>
+      <table>
+        <tr><td>DBサイズ</td><td class="r" id="dbSize">–</td></tr>
+        <tr><td>発行中トークン</td><td class="r" id="tokens">–</td></tr>
+        <tr><td>配信済みお知らせ</td><td class="r" id="bcCount">–</td></tr>
+        <tr><td>名前を設定した人</td><td class="r" id="withName">–</td></tr>
+        <tr><td>ドット絵を描いた人</td><td class="r" id="withPiece">–</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════ 利用者 ══════════ -->
+  <section id="secUsers" hidden>
+    <div class="card">
+      <h2>利用者のプロフィール</h2>
+      <p class="muted" style="margin:0 0 12px">
+        表示しているのは、利用者が<b>すれ違った相手に見せる前提で設定した情報</b>だけです。
+        すれ違いの履歴・位置・APIキーは記録も表示もしていません。
+      </p>
+      <div class="users" id="userList"></div>
+      <div class="status" id="usersStatus"></div>
+    </div>
+  </section>
+
+  <!-- ══════════ 配信 ══════════ -->
+  <section id="secSend" hidden>
+    <div class="card">
+      <h2>お知らせ配信</h2>
+      <p class="muted" style="margin:0">
+        送信すると、アプリを起動している利用者全員の「きょうの広場」にバナー表示されます
+        （アプリを完全に閉じている間は届きません）。
+      </p>
+      <label>タイトル（40文字まで）
+        <input id="title" maxlength="40" placeholder="例: 開会のお知らせ">
+      </label>
+      <div class="counter"><span id="titleCount">0</span>/40</div>
+
+      <label>本文（200文字まで）
+        <textarea id="body" maxlength="200" placeholder="例: まもなくステージが始まります！"></textarea>
+      </label>
+      <div class="counter"><span id="bodyCount">0</span>/200</div>
+
+      <button class="action" id="send">送信する</button>
+      <div class="status" id="sendStatus"></div>
+    </div>
+  </section>
 
 <script>
   const $ = (id) => document.getElementById(id);
@@ -68,11 +197,181 @@
   // 素で呼ぶと以降のスクリプトが丸ごと止まり、ボタンが無反応になるため必ず包む。
   const storage = {
     get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 保存できなくても送信は可能 */ } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 保存できなくても操作は可能 */ } },
+  };
+  $('token').value = storage.get('admin_token');
+  $('token').addEventListener('change', () => storage.set('admin_token', $('token').value.trim()));
+
+  const api = (path, opts = {}) => fetch('/admin/api/' + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json; charset=utf-8',
+               'X-Admin-Token': $('token').value.trim(), ...(opts.headers || {}) },
+  });
+
+  const fmtBytes = (n) => {
+    if (!n) return '0 B';
+    const u = ['B','KB','MB','GB','TB'];
+    const i = Math.floor(Math.log(n) / Math.log(1024));
+    return (n / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i];
+  };
+  const fmtTime = (sec) => {
+    if (!sec) return '—';
+    const d = new Date(sec * 1000);
+    const p = (x) => String(x).padStart(2, '0');
+    return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
 
-  $('token').value = storage.get('admin_token');
+  const setMeter = (barId, txtId, percent, detail) => {
+    const bar = $(barId);
+    bar.style.width = Math.min(100, percent) + '%';
+    bar.className = 'fill' + (percent >= 90 ? ' crit' : percent >= 70 ? ' warn' : '');
+    $(txtId).textContent = percent.toFixed(1) + '%' + (detail ? '　' + detail : '');
+  };
 
+  // ─── タブ切り替え ───
+  const tabs = [['tabDash','secDash'], ['tabUsers','secUsers'], ['tabSend','secSend']];
+  tabs.forEach(([btn, sec]) => $(btn).addEventListener('click', () => {
+    tabs.forEach(([b, s]) => {
+      $(b).setAttribute('aria-selected', b === btn);
+      $(s).hidden = s !== sec;
+    });
+    if (sec === 'secUsers') loadUsers();
+    if (sec === 'secDash') loadStats();
+  }));
+
+  // ─── 状況 ───
+  async function loadStats() {
+    if (!$('token').value.trim()) return;
+    try {
+      const res = await api('stats');
+      if (!res.ok) { $('dashStatus').textContent = res.status === 401
+        ? '❌ トークンが違います' : `❌ 取得失敗 (${res.status})`; return; }
+      const d = await res.json();
+      $('a5').textContent = d.users.active_5m;
+      $('a1h').textContent = d.users.active_1h;
+      $('a24').textContent = d.users.active_24h;
+      $('utotal').textContent = d.users.total;
+      $('withName').textContent = d.users.with_name + ' 人';
+      $('withPiece').textContent = d.users.with_piece + ' 人';
+      $('tokens').textContent = d.tokens + ' 本';
+      $('bcCount').textContent = d.broadcasts + ' 件';
+      $('dbSize').textContent = fmtBytes(d.db_size);
+
+      setMeter('cpuBar', 'cpuTxt', d.host.cpu_percent, '');
+      setMeter('memBar', 'memTxt', d.host.mem_percent,
+               `${fmtBytes(d.host.mem_used)} / ${fmtBytes(d.host.mem_total)}`);
+      setMeter('diskBar', 'diskTxt', d.host.disk_percent,
+               `${fmtBytes(d.host.disk_used)} / ${fmtBytes(d.host.disk_total)}`);
+
+      $('backupList').innerHTML = d.backups.length
+        ? d.backups.slice(0, 5).map(b =>
+            `<tr><td>${b.name}</td><td class="r">${fmtBytes(b.size)}　${fmtTime(b.mtime)}</td></tr>`).join('')
+        : '<tr><td class="muted">まだありません</td></tr>';
+      $('dashStatus').textContent = '';
+    } catch (e) {
+      $('dashStatus').textContent = '❌ 通信エラー: ' + e;
+    }
+  }
+
+  $('backupBtn').addEventListener('click', async () => {
+    const btn = $('backupBtn'), st = $('backupStatus');
+    btn.disabled = true; st.textContent = '作成中…';
+    try {
+      const res = await api('backup', { method: 'POST' });
+      if (res.status === 401) st.textContent = '❌ トークンが違います';
+      else if (!res.ok) st.textContent = `❌ 失敗 (${res.status})`;
+      else {
+        const d = await res.json();
+        st.textContent = `✅ ${d.name}（${fmtBytes(d.size)}）を作成しました`;
+        loadStats();
+      }
+    } catch (e) { st.textContent = '❌ 通信エラー: ' + e; }
+    finally { btn.disabled = false; }
+  });
+
+  // ─── 利用者 ───
+  // アプリと同じ16色パレット（lib/models/piece_data.dart と対応）
+  const PALETTE = ['#1A1A2E','#16213E','#0F3460','#533483','#E94560','#FF8C42',
+                   '#FFD166','#06D6A0','#118AB2','#FFFFFF','#AAAAAA','#555555',
+                   '#8B4513','#FF69B4','#000000', null /* 15=透明 */];
+  const STATUS = ['すれ違い中！','学校・職場にいます','ガチで暇してます','忙しくて修羅場です',
+                  '外出中です','お家でまったり中','移動中です','イベント参加中！'];
+  const HOBBY = ['ゲーム','アニメ・漫画','音楽・ライブ','スポーツ',
+                 'グルメ・カフェ','旅行・アウトドア','映画・ドラマ','読書・勉強'];
+  const DETAIL = [['ガチ勢','エンジョイ勢','レトロゲー好き','スマホゲーメイン'],
+                  ['アニメ派','漫画派','声優オタク','BL・TL好き'],
+                  ['邦楽派','洋楽派','ライブ命','DTM・制作もやる'],
+                  ['観戦派','プレイヤー','筋トレ中','マラソン好き'],
+                  ['ラーメン道','スイーツ探求','カフェ巡り','料理好き'],
+                  ['国内旅行派','海外旅行派','キャンプ好き','散歩・街歩き'],
+                  ['映画館派','サブスク派','ホラー好き','アクション好き'],
+                  ['受験・勉強中','読書好き','資格取得中','ビジネス書派']];
+  const PHRASE = ['お気軽にどうぞ！','気が合ったらまた会おう','よろしく！','話しかけてね！',
+                  '仲良くしましょう','よい一日を！','また会いましょう','一期一会ですね'];
+
+  const pick = (arr, i) => (i >= 0 && i < arr.length) ? arr[i] : null;
+
+  function introText(intro) {
+    const [s, hc, hd, ph] = intro;
+    const parts = [];
+    const st = pick(STATUS, s); if (st) parts.push(st);
+    const h = pick(HOBBY, hc);
+    if (h) {
+      const d = (hc >= 0 && hc < DETAIL.length) ? pick(DETAIL[hc], hd) : null;
+      parts.push(d ? `${h}(${d})` : h);
+    }
+    const p = pick(PHRASE, ph); if (p) parts.push(p);
+    return parts.length ? parts.join(' ・ ') : '未設定';
+  }
+
+  function drawPiece(canvas, pixels) {
+    const ctx = canvas.getContext('2d');
+    canvas.width = 16; canvas.height = 16;
+    ctx.clearRect(0, 0, 16, 16);
+    if (!pixels) return;
+    for (let i = 0; i < 256; i++) {
+      const c = PALETTE[pixels[i]];
+      if (!c) continue;            // 15番は透明
+      ctx.fillStyle = c;
+      ctx.fillRect(i % 16, Math.floor(i / 16), 1, 1);
+    }
+  }
+
+  async function loadUsers() {
+    if (!$('token').value.trim()) { $('usersStatus').textContent = '管理者トークンを入力してください'; return; }
+    $('usersStatus').textContent = '読み込み中…';
+    try {
+      const res = await api('users?limit=200');
+      if (!res.ok) { $('usersStatus').textContent = res.status === 401
+        ? '❌ トークンが違います' : `❌ 取得失敗 (${res.status})`; return; }
+      const d = await res.json();
+      const now = Math.floor(Date.now() / 1000);
+      $('userList').innerHTML = '';
+      d.users.forEach(u => {
+        const el = document.createElement('div');
+        el.className = 'user';
+        const cv = document.createElement('canvas');
+        drawPiece(cv, u.pixels);
+        const info = document.createElement('div');
+        const online = (now - u.last_seen) < 300;
+        info.innerHTML =
+          `<div class="name"><span class="dot ${online ? 'on' : ''}"></span>` +
+          `${u.name ? escapeHtml(u.name) : '<span style="color:#BFB0A0">名前なし</span>'}</div>` +
+          `<div class="meta">${escapeHtml(introText(u.intro))}</div>` +
+          `<div class="meta">id ${u.id}　最終 ${fmtTime(u.last_seen)}</div>`;
+        el.append(cv, info);
+        $('userList').append(el);
+      });
+      $('usersStatus').textContent = d.users.length
+        ? `${d.users.length} 人を表示（登録 ${d.total} 人）`
+        : 'まだ利用者がいません';
+    } catch (e) { $('usersStatus').textContent = '❌ 通信エラー: ' + e; }
+  }
+
+  const escapeHtml = (s) => s.replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ─── 配信 ───
   $('title').addEventListener('input', () => $('titleCount').textContent = $('title').value.length);
   $('body').addEventListener('input', () => $('bodyCount').textContent = $('body').value.length);
 
@@ -80,38 +379,36 @@
     const token = $('token').value.trim();
     const title = $('title').value.trim();
     const body = $('body').value.trim();
-    const status = $('status');
+    const st = $('sendStatus');
 
-    if (!token) { status.textContent = '管理者トークンを入力してください'; return; }
-    if (!title || !body) { status.textContent = 'タイトルと本文を入力してください'; return; }
+    if (!token) { st.textContent = '管理者トークンを入力してください'; return; }
+    if (!title || !body) { st.textContent = 'タイトルと本文を入力してください'; return; }
 
     $('send').disabled = true;
-    status.textContent = '送信中…';
+    st.textContent = '送信中…';
     try {
-      const res = await fetch('/admin/broadcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
-        body: JSON.stringify({ title, body }),
-      });
+      const res = await api('broadcast', { method: 'POST', body: JSON.stringify({ title, body }) });
       if (res.status === 401) {
-        status.textContent = '❌ トークンが違います（サーバーの ADMIN_TOKEN と一致しているか確認してください）';
+        st.textContent = '❌ トークンが違います（サーバーの ADMIN_TOKEN と一致しているか確認してください）';
       } else if (!res.ok) {
-        const t = await res.text();
-        status.textContent = `❌ 送信失敗 (${res.status}): ${t}`;
+        st.textContent = `❌ 送信失敗 (${res.status}): ${await res.text()}`;
       } else {
         storage.set('admin_token', token);
-        status.textContent = '✅ 配信しました';
-        $('title').value = '';
-        $('body').value = '';
-        $('titleCount').textContent = 0;
-        $('bodyCount').textContent = 0;
+        st.textContent = '✅ 配信しました';
+        $('title').value = ''; $('body').value = '';
+        $('titleCount').textContent = 0; $('bodyCount').textContent = 0;
       }
     } catch (e) {
-      status.textContent = '❌ 通信エラー: ' + e;
+      st.textContent = '❌ 通信エラー: ' + e;
     } finally {
       $('send').disabled = false;
     }
   });
+
+  // 初期表示。トークン入力後にも取り直せるよう change でも走らせる。
+  loadStats();
+  $('token').addEventListener('change', loadStats);
+  setInterval(() => { if (!$('secDash').hidden) loadStats(); }, 30000);
 </script>
 </body>
 </html>

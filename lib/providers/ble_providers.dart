@@ -267,6 +267,10 @@ class AppNotifier extends Notifier<AppState> {
       piecePixels: (dotAvatar != null && !dotAvatar.isEmpty)
           ? dotAvatar.toPiecePixels()
           : null,
+      introStatus:   p.template.statusIndex,
+      introHobbyCat: p.template.hobbyCategory,
+      introHobbyDet: p.template.hobbyDetail,
+      introPhrase:   p.template.phraseIndex,
     );
   }
 

@@ -60,6 +60,15 @@
 		}
 		header X-Robots-Tag "noindex, nofollow"
 
+		# 管理者APIはAPIコンテナへ転送。画面の静的ファイルはこの下の handle で配信。
+		@adminApi path /admin/api/*
+		handle @adminApi {
+			reverse_proxy api:8080 {
+				header_up X-Forwarded-For {remote_host}
+			}
+		}
+
+		# 旧パス（ラズパイ等の既存スクリプト互換）
 		@broadcastPost {
 			method POST
 			path /admin/broadcast

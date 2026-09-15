@@ -183,6 +183,12 @@ class ApiService {
     required int colorIndex,
     List<int>? piecePixels,
     int? badgeLevel,
+    // 自己紹介テンプレート（初期設定で選ぶ4項目の選択肢インデックス）。
+    // 自由入力は送らない＝匿名性を保ったまま人となりだけ伝える。
+    int? introStatus,
+    int? introHobbyCat,
+    int? introHobbyDet,
+    int? introPhrase,
   }) async {
     if (!await _ready()) return false;
     try {
@@ -194,6 +200,10 @@ class ApiService {
                 'color_index': colorIndex,
                 if (piecePixels != null) 'piece_data': piecePixels,
                 if (badgeLevel != null) 'badge_level': badgeLevel,
+                if (introStatus != null) 'intro_status': introStatus,
+                if (introHobbyCat != null) 'intro_hobby_cat': introHobbyCat,
+                if (introHobbyDet != null) 'intro_hobby_det': introHobbyDet,
+                if (introPhrase != null) 'intro_phrase': introPhrase,
               }))
           .timeout(_timeout);
       return res.statusCode == 200;

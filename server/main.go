@@ -44,6 +44,9 @@ const (
 
 var db *sql.DB
 
+// DBファイルの実パス。バックアップ先やディスク使用量の算出に使う。
+var dbPathGlobal string
+
 // ─── レート制限（IP単位のトークンバケット）───────────────────────────────
 type bucket struct {
 	tokens float64
@@ -168,8 +171,25 @@ CREATE TABLE IF NOT EXISTS broadcasts (
 );
 CREATE INDEX IF NOT EXISTS idx_broadcasts_created ON broadcasts(created_at);
 `
-	_, err = db.Exec(schema)
-	return err
+	if _, err = db.Exec(schema); err != nil {
+		return err
+	}
+
+	// 既存DBへの後方互換な列追加。SQLiteに ADD COLUMN IF NOT EXISTS は無いため、
+	// 重複時のエラーは無視する（初回以降は毎回エラーになるが害はない）。
+	for _, alter := range []string{
+		`ALTER TABLE users ADD COLUMN last_seen_at INTEGER NOT NULL DEFAULT 0`,
+		// 自己紹介テンプレート。アプリの初期設定で選ぶ4項目を、文字列ではなく
+		// 選択肢のインデックスで保持する（自由入力を持たせない＝匿名性の担保）。
+		`ALTER TABLE users ADD COLUMN intro_status INTEGER NOT NULL DEFAULT -1`,
+		`ALTER TABLE users ADD COLUMN intro_hobby_cat INTEGER NOT NULL DEFAULT -1`,
+		`ALTER TABLE users ADD COLUMN intro_hobby_det INTEGER NOT NULL DEFAULT -1`,
+		`ALTER TABLE users ADD COLUMN intro_phrase INTEGER NOT NULL DEFAULT -1`,
+	} {
+		_, _ = db.Exec(alter)
+	}
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen_at)`)
+	return nil
 }
 
 func randHex(n int) string {
@@ -228,7 +248,24 @@ func authUser(r *http.Request) (string, bool) {
 	if subtle.ConstantTimeCompare(sum[:], stored) != 1 {
 		return "", false
 	}
+	touchLastSeen(id)
 	return id, true
+}
+
+// 最終アクセス時刻の記録。アクティブ人数の算出に使う。
+// 毎リクエスト書き込むとSQLiteへの書き込みが増えるため、60秒に1回までに間引く。
+// 記録するのは時刻のみで、IPや行動履歴は一切残さない（匿名性の維持）。
+var lastSeenCache sync.Map // userID -> time.Time
+
+func touchLastSeen(id string) {
+	now := time.Now()
+	if v, ok := lastSeenCache.Load(id); ok {
+		if now.Sub(v.(time.Time)) < 60*time.Second {
+			return
+		}
+	}
+	lastSeenCache.Store(id, now)
+	_, _ = db.Exec(`UPDATE users SET last_seen_at = ? WHERE id = ?`, now.Unix(), id)
 }
 
 // ─── ハンドラ ───────────────────────────────────────────────────────────
@@ -372,6 +409,20 @@ type profileReq struct {
 	ColorIndex  *int    `json:"color_index"`
 	PieceData   []int   `json:"piece_data"`
 	BadgeLevel  *int    `json:"badge_level"`
+	// 自己紹介テンプレート。アプリ側の選択肢インデックスをそのまま持つ。
+	// -1 は未回答。自由入力は受け付けない（匿名性の維持）。
+	IntroStatus   *int `json:"intro_status"`
+	IntroHobbyCat *int `json:"intro_hobby_cat"`
+	IntroHobbyDet *int `json:"intro_hobby_det"`
+	IntroPhrase   *int `json:"intro_phrase"`
+}
+
+// 自己紹介の選択肢インデックスを検証する。-1(未回答) か 0..max の範囲のみ許可。
+func introIndex(v int, max int) int {
+	if v < 0 || v > max {
+		return -1
+	}
+	return v
 }
 
 // POST /v1/profile — 自分のプロフィール更新（users テーブル upsert 相当）
@@ -416,6 +467,22 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		sets = append(sets, "badge_level = ?")
 		args = append(args, b)
+	}
+	// 選択肢の個数はアプリ側の定義に合わせる（status 8 / category 8 / detail 4 / phrase 8）
+	for _, f := range []struct {
+		val *int
+		col string
+		max int
+	}{
+		{req.IntroStatus, "intro_status", 7},
+		{req.IntroHobbyCat, "intro_hobby_cat", 7},
+		{req.IntroHobbyDet, "intro_hobby_det", 3},
+		{req.IntroPhrase, "intro_phrase", 7},
+	} {
+		if f.val != nil {
+			sets = append(sets, f.col+" = ?")
+			args = append(args, introIndex(*f.val, f.max))
+		}
 	}
 	if req.PieceData != nil {
 		packed, err := packPixels(req.PieceData)
@@ -537,6 +604,285 @@ func handleBroadcasts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// ─── サーバー監視（管理者向け）─────────────────────────────────────────
+//
+// 共有サーバーなので外部の監視エージェントを常駐させず、API自身で数値を出す。
+// コンテナ内から見える /proc はホストのものなので、ホスト全体の負荷が取れる。
+
+// CPU使用率は瞬間値が取れない。5秒ごとにサンプリングして最新値を保持する。
+var cpuPercent struct {
+	sync.Mutex
+	value float64
+}
+
+// /proc/stat の1行目から (総時間, アイドル時間) を得る
+func readCPUTimes() (total, idle uint64, err error) {
+	b, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return 0, 0, err
+	}
+	line := strings.SplitN(string(b), "\n", 2)[0]
+	fields := strings.Fields(line)
+	if len(fields) < 5 || fields[0] != "cpu" {
+		return 0, 0, errors.New("unexpected /proc/stat")
+	}
+	for i, f := range fields[1:] {
+		v, e := strconv.ParseUint(f, 10, 64)
+		if e != nil {
+			continue
+		}
+		total += v
+		if i == 3 { // idle列
+			idle = v
+		}
+	}
+	return total, idle, nil
+}
+
+func startCPUSampler() {
+	go func() {
+		prevTotal, prevIdle, err := readCPUTimes()
+		if err != nil {
+			log.Printf("cpu sampler disabled: %v", err)
+			return
+		}
+		for {
+			time.Sleep(5 * time.Second)
+			total, idle, err := readCPUTimes()
+			if err != nil {
+				continue
+			}
+			dt, di := total-prevTotal, idle-prevIdle
+			prevTotal, prevIdle = total, idle
+			if dt == 0 {
+				continue
+			}
+			cpuPercent.Lock()
+			cpuPercent.value = (1.0 - float64(di)/float64(dt)) * 100.0
+			cpuPercent.Unlock()
+		}
+	}()
+}
+
+// /proc/meminfo から MemTotal と MemAvailable を取る（KB単位）
+func readMemInfo() (totalKB, availKB uint64) {
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, 0
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		v, _ := strconv.ParseUint(fields[1], 10, 64)
+		switch fields[0] {
+		case "MemTotal:":
+			totalKB = v
+		case "MemAvailable:":
+			availKB = v
+		}
+	}
+	return
+}
+
+// /data を含むファイルシステム（＝ホストのディスク）の使用状況
+func readDisk(path string) (totalBytes, freeBytes uint64) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(path, &st); err != nil {
+		return 0, 0
+	}
+	return st.Blocks * uint64(st.Bsize), st.Bavail * uint64(st.Bsize)
+}
+
+func pct(used, total uint64) float64 {
+	if total == 0 {
+		return 0
+	}
+	return float64(used) / float64(total) * 100.0
+}
+
+// バックアップ世代の一覧（新しい順）
+func listBackups() []map[string]any {
+	dir := filepathJoin(dbPathGlobal, "backups")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return []map[string]any{}
+	}
+	names := []string{}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), "app-") && strings.HasSuffix(e.Name(), ".db") {
+			names = append(names, e.Name())
+		}
+	}
+	sortStrings(names)
+	out := []map[string]any{}
+	for i := len(names) - 1; i >= 0; i-- { // 新しい順
+		fi, err := os.Stat(dir + "/" + names[i])
+		if err != nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"name": names[i], "size": fi.Size(), "mtime": fi.ModTime().Unix(),
+		})
+	}
+	return out
+}
+
+// GET /admin/api/stats — 稼働状況のサマリー
+func handleAdminStats(w http.ResponseWriter, r *http.Request) {
+	if !adminLimiter.allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "rate limited")
+		return
+	}
+	if !authAdmin(r) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	now := time.Now()
+	count := func(q string, args ...any) int {
+		var n int
+		_ = db.QueryRow(q, args...).Scan(&n)
+		return n
+	}
+
+	memTotal, memAvail := readMemInfo()
+	diskTotal, diskFree := readDisk(filepathJoin(dbPathGlobal, ""))
+	cpuPercent.Lock()
+	cpu := cpuPercent.value
+	cpuPercent.Unlock()
+
+	var dbSize int64
+	if fi, err := os.Stat(dbPathGlobal); err == nil {
+		dbSize = fi.Size()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users": map[string]any{
+			"total":      count("SELECT count(*) FROM users"),
+			"active_5m":  count("SELECT count(*) FROM users WHERE last_seen_at > ?", now.Add(-5*time.Minute).Unix()),
+			"active_1h":  count("SELECT count(*) FROM users WHERE last_seen_at > ?", now.Add(-time.Hour).Unix()),
+			"active_24h": count("SELECT count(*) FROM users WHERE last_seen_at > ?", now.Add(-24*time.Hour).Unix()),
+			"with_name":  count("SELECT count(*) FROM users WHERE display_name <> ''"),
+			"with_piece": count("SELECT count(*) FROM users WHERE piece_data IS NOT NULL"),
+		},
+		"tokens":     count("SELECT count(*) FROM tokens"),
+		"broadcasts": count("SELECT count(*) FROM broadcasts"),
+		"host": map[string]any{
+			"cpu_percent":  cpu,
+			"mem_total":    memTotal * 1024,
+			"mem_used":     (memTotal - memAvail) * 1024,
+			"mem_percent":  pct(memTotal-memAvail, memTotal),
+			"disk_total":   diskTotal,
+			"disk_used":    diskTotal - diskFree,
+			"disk_percent": pct(diskTotal-diskFree, diskTotal),
+		},
+		"db_size": dbSize,
+		"backups": listBackups(),
+		"now":     now.Unix(),
+	})
+}
+
+// POST /admin/api/backup — その場でバックアップを作る
+//
+// 作るのは**サーバー内のローカル複製のみ**。Google Driveへの退避はホスト側の
+// cron(毎日4:10)が担当で、ここからは起動できない（起動するにはコンテナへ
+// dockerソケットを渡す必要があり、共有サーバーでは危険なため採らない）。
+func handleAdminBackup(w http.ResponseWriter, r *http.Request) {
+	if !adminLimiter.allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "rate limited")
+		return
+	}
+	if !authAdmin(r) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	dir := filepathJoin(dbPathGlobal, "backups")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		writeErr(w, http.StatusInternalServerError, "cannot create backup dir")
+		return
+	}
+	// 手動実行は同日でも上書きせず時刻付きで残す（cronの日次分と区別するため）
+	dst := dir + "/app-" + time.Now().Format("20060102-150405") + ".db"
+	if _, err := db.Exec("VACUUM INTO ?", dst); err != nil {
+		log.Printf("manual backup: %v", err)
+		writeErr(w, http.StatusInternalServerError, "backup failed")
+		return
+	}
+	var size int64
+	if fi, err := os.Stat(dst); err == nil {
+		size = fi.Size()
+	}
+	pruneBackups(dir, 14) // 手動分が増えるので世代上限を広げる
+	log.Printf("admin: manual backup created (%d bytes)", size)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name": dst[strings.LastIndex(dst, "/")+1:], "size": size,
+	})
+}
+
+// GET /admin/api/users — 利用者一覧（表示名・色・自己紹介・ドット絵）
+//
+// 返すのは利用者が「すれ違った相手に見せる前提で設定した情報」だけ。
+// APIキー・すれ違い履歴・IP・位置情報は一切返さない（匿名性の絶対維持）。
+func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if !adminLimiter.allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "rate limited")
+		return
+	}
+	if !authAdmin(r) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	limit := 50
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 200 {
+		limit = v
+	}
+	offset := 0
+	if v, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil && v >= 0 {
+		offset = v
+	}
+
+	rows, err := db.Query("SELECT id, display_name, color_index, piece_data, badge_level,"+
+		" created_at, last_seen_at, intro_status, intro_hobby_cat, intro_hobby_det, intro_phrase"+
+		" FROM users ORDER BY last_seen_at DESC, created_at DESC LIMIT ? OFFSET ?", limit, offset)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	defer rows.Close()
+
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, name string
+		var color, badge, introS, introHC, introHD, introP int
+		var createdAt, lastSeen int64
+		var piece []byte
+		if err := rows.Scan(&id, &name, &color, &piece, &badge, &createdAt, &lastSeen,
+			&introS, &introHC, &introHD, &introP); err != nil {
+			continue
+		}
+		short := id
+		if len(short) > 8 {
+			short = short[:8]
+		}
+		out = append(out, map[string]any{
+			// IDは先頭8文字のみ（照合には足り、全体は見せない）
+			"id":         short,
+			"name":       name,
+			"color":      color,
+			"badge":      badge,
+			"created_at": createdAt,
+			"last_seen":  lastSeen,
+			"pixels":     unpackPixels(piece),
+			"intro":      []int{introS, introHC, introHD, introP},
+		})
+	}
+	var total int
+	_ = db.QueryRow("SELECT count(*) FROM users").Scan(&total)
+	writeJSON(w, http.StatusOK, map[string]any{"total": total, "users": out})
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if err := db.Ping(); err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "db down")
@@ -606,6 +952,7 @@ func main() {
 	if dbPath == "" {
 		dbPath = "/data/app.db"
 	}
+	dbPathGlobal = dbPath
 	if err := initDB(dbPath); err != nil {
 		log.Fatalf("db init: %v", err)
 	}
@@ -620,6 +967,8 @@ func main() {
 		log.Println("admin: ADMIN_TOKEN not set — broadcast endpoint disabled")
 	}
 
+	startCPUSampler()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/health", withCommon(handleHealth, http.MethodGet, false))
 	mux.HandleFunc("/v1/auth/anon", withCommon(handleAuthAnon, http.MethodPost, false))
@@ -627,6 +976,12 @@ func main() {
 	mux.HandleFunc("/v1/tokens/resolve", withCommon(handleResolveTokens, http.MethodPost, true))
 	mux.HandleFunc("/v1/profile", withCommon(handleProfile, http.MethodPost, true))
 	mux.HandleFunc("/v1/broadcasts", withCommon(handleBroadcasts, http.MethodGet, true))
+	// 管理者API。Caddy側でBasic認証を通した上で、さらにX-Admin-Tokenを検証する。
+	mux.HandleFunc("/admin/api/broadcast", withCommon(handleAdminBroadcast, http.MethodPost, false))
+	mux.HandleFunc("/admin/api/stats", withCommon(handleAdminStats, http.MethodGet, false))
+	mux.HandleFunc("/admin/api/users", withCommon(handleAdminUsers, http.MethodGet, false))
+	mux.HandleFunc("/admin/api/backup", withCommon(handleAdminBackup, http.MethodPost, false))
+	// 旧パス（ラズパイ等の既存スクリプト互換）
 	mux.HandleFunc("/admin/broadcast", withCommon(handleAdminBroadcast, http.MethodPost, false))
 
 	srv := &http.Server{
