@@ -17,11 +17,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -89,8 +91,11 @@ func (l *limiter) allow(key string) bool {
 }
 
 var (
-	signupLimiter = newLimiter(5, 5)      // 匿名登録: 5回/分（新規ユーザー乱造の抑止）
-	apiLimiter    = newLimiter(120, 60)   // 通常API: 120回/分
+	signupLimiter   = newLimiter(5, 5)     // 匿名登録: 5回/分（新規ユーザー乱造の抑止）
+	apiLimiter      = newLimiter(120, 60)  // 通常API: 120回/分
+	adminLimiter    = newLimiter(20, 10)   // 管理者API: 20回/分（総当たり対策）
+	adminTokenHash  [32]byte               // ADMIN_TOKEN のSHA-256（起動時に一度だけ計算）
+	adminEnabled    bool                   // ADMIN_TOKEN が設定されている場合のみ有効
 )
 
 // ─── ドット絵の圧縮（4bit/px パック）─────────────────────────────────────
@@ -154,6 +159,14 @@ CREATE TABLE IF NOT EXISTS tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_tokens_issued ON tokens(issued_at);
 CREATE INDEX IF NOT EXISTS idx_tokens_user ON tokens(user_id);
+
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_broadcasts_created ON broadcasts(created_at);
 `
 	_, err = db.Exec(schema)
 	return err
@@ -424,6 +437,106 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /v1/health — 監視用（認証不要・内部情報は出さない）
+// ─── 管理者ブロードキャスト（文化祭運営向け）───────────────────────────
+//
+// 管理者が任意のタイトル・本文を配信し、アプリ利用者は起動中に定期取得して
+// バナー表示する（プッシュ通知ではなくポーリング。アプリを完全に閉じている
+// 間は届かない。FCM等の外部サービス導入を避け、自前サーバー完結を優先）。
+//
+// 認証は共有シークレット（環境変数 ADMIN_TOKEN）を X-Admin-Token ヘッダで
+// 照合する定数時間比較。ユーザーのBearerキーとは別体系（管理者はアプリの
+// ユーザーではないため）。ADMIN_TOKEN 未設定時はエンドポイント自体を無効化し、
+// 誤って空文字と比較して突破されることを防ぐ。
+
+func authAdmin(r *http.Request) bool {
+	if !adminEnabled {
+		return false
+	}
+	tok := r.Header.Get("X-Admin-Token")
+	if tok == "" {
+		return false
+	}
+	sum := sha256.Sum256([]byte(tok))
+	return subtle.ConstantTimeCompare(sum[:], adminTokenHash[:]) == 1
+}
+
+type broadcastReq struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+}
+
+// POST /admin/broadcast — 全利用者への配信を1件作成する
+func handleAdminBroadcast(w http.ResponseWriter, r *http.Request) {
+	if !adminLimiter.allow(clientIP(r)) {
+		writeErr(w, http.StatusTooManyRequests, "rate limited")
+		return
+	}
+	if !authAdmin(r) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var req broadcastReq
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Body = strings.TrimSpace(req.Body)
+	if req.Title == "" || len([]rune(req.Title)) > 40 {
+		writeErr(w, http.StatusBadRequest, "title must be 1-40 chars")
+		return
+	}
+	if req.Body == "" || len([]rune(req.Body)) > 200 {
+		writeErr(w, http.StatusBadRequest, "body must be 1-200 chars")
+		return
+	}
+	res, err := db.Exec(`INSERT INTO broadcasts (title, body, created_at) VALUES (?, ?, ?)`,
+		req.Title, req.Body, time.Now().Unix())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	id, _ := res.LastInsertId()
+	log.Printf("admin: broadcast #%d created", id)
+	writeJSON(w, http.StatusOK, map[string]any{"id": id})
+}
+
+// GET /v1/broadcasts?since=<id> — 未読分の配信一覧（アプリが定期ポーリング）
+// 通常ユーザーのBearer認証を要求する（匿名性維持・全API認証必須の方針に合わせる）。
+func handleBroadcasts(w http.ResponseWriter, r *http.Request) {
+	if _, ok := authUser(r); !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	since := int64(0)
+	if s := r.URL.Query().Get("since"); s != "" {
+		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v >= 0 {
+			since = v
+		}
+	}
+	rows, err := db.Query(
+		`SELECT id, title, body, created_at FROM broadcasts WHERE id > ? ORDER BY id ASC LIMIT 20`,
+		since)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "db error")
+		return
+	}
+	defer rows.Close()
+
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, createdAt int64
+		var title, body string
+		if err := rows.Scan(&id, &title, &body, &createdAt); err != nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"id": id, "title": title, "body": body, "created_at": createdAt,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if err := db.Ping(); err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "db down")
@@ -498,12 +611,23 @@ func main() {
 	}
 	defer db.Close()
 
+	// ADMIN_TOKEN 未設定なら管理者エンドポイントは常に401を返す（安全側デフォルト）
+	if tok := os.Getenv("ADMIN_TOKEN"); tok != "" {
+		adminTokenHash = sha256.Sum256([]byte(tok))
+		adminEnabled = true
+		log.Println("admin: broadcast endpoint enabled")
+	} else {
+		log.Println("admin: ADMIN_TOKEN not set — broadcast endpoint disabled")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/health", withCommon(handleHealth, http.MethodGet, false))
 	mux.HandleFunc("/v1/auth/anon", withCommon(handleAuthAnon, http.MethodPost, false))
 	mux.HandleFunc("/v1/tokens/issue", withCommon(handleIssueToken, http.MethodPost, true))
 	mux.HandleFunc("/v1/tokens/resolve", withCommon(handleResolveTokens, http.MethodPost, true))
 	mux.HandleFunc("/v1/profile", withCommon(handleProfile, http.MethodPost, true))
+	mux.HandleFunc("/v1/broadcasts", withCommon(handleBroadcasts, http.MethodGet, true))
+	mux.HandleFunc("/admin/broadcast", withCommon(handleAdminBroadcast, http.MethodPost, false))
 
 	srv := &http.Server{
 		Addr:              ":8080",

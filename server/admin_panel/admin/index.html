@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>はじめましてこんにちは — 管理者パネル</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    max-width: 480px; margin: 40px auto; padding: 0 20px;
+    background: #FBF3E4; color: #4A3C31;
+  }
+  h1 { font-size: 18px; }
+  label { display: block; margin-top: 16px; font-size: 13px; font-weight: bold; }
+  input, textarea {
+    width: 100%; box-sizing: border-box; padding: 10px; margin-top: 6px;
+    border: 1px solid #d8c9b3; border-radius: 8px; font-size: 15px;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  button {
+    margin-top: 20px; width: 100%; padding: 12px; border: none; border-radius: 10px;
+    background: #FF8A70; color: white; font-size: 15px; font-weight: bold; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; }
+  #status { margin-top: 14px; font-size: 13px; white-space: pre-wrap; }
+  #history { margin-top: 28px; font-size: 12px; color: #8A7A6B; }
+  .counter { text-align: right; font-size: 11px; color: #8A7A6B; }
+</style>
+</head>
+<body>
+  <h1>📣 お知らせ配信</h1>
+  <p style="font-size:13px;color:#8A7A6B">
+    ここから送信すると、アプリを起動している利用者全員の「きょうの広場」に
+    バナー表示されます（アプリを完全に閉じている間は届きません）。
+  </p>
+
+  <label>管理者トークン
+    <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
+  </label>
+
+  <label>タイトル（40文字まで）
+    <input id="title" maxlength="40" placeholder="例: 開会のお知らせ">
+  </label>
+  <div class="counter"><span id="titleCount">0</span>/40</div>
+
+  <label>本文（200文字まで）
+    <textarea id="body" maxlength="200" placeholder="例: まもなくステージが始まります！"></textarea>
+  </label>
+  <div class="counter"><span id="bodyCount">0</span>/200</div>
+
+  <button id="send">送信する</button>
+  <div id="status"></div>
+
+  <div id="history"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // トークンはこの端末のブラウザにのみ保存する（サーバーへは送信のたびに送るだけ）
+  $('token').value = localStorage.getItem('admin_token') || '';
+
+  $('title').addEventListener('input', () => $('titleCount').textContent = $('title').value.length);
+  $('body').addEventListener('input', () => $('bodyCount').textContent = $('body').value.length);
+
+  $('send').addEventListener('click', async () => {
+    const token = $('token').value.trim();
+    const title = $('title').value.trim();
+    const body = $('body').value.trim();
+    const status = $('status');
+
+    if (!token) { status.textContent = '管理者トークンを入力してください'; return; }
+    if (!title || !body) { status.textContent = 'タイトルと本文を入力してください'; return; }
+
+    $('send').disabled = true;
+    status.textContent = '送信中…';
+    try {
+      const res = await fetch('/admin/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+        body: JSON.stringify({ title, body }),
+      });
+      if (res.status === 401) {
+        status.textContent = '❌ トークンが違います（サーバーの ADMIN_TOKEN と一致しているか確認してください）';
+      } else if (!res.ok) {
+        const t = await res.text();
+        status.textContent = `❌ 送信失敗 (${res.status}): ${t}`;
+      } else {
+        localStorage.setItem('admin_token', token);
+        status.textContent = '✅ 配信しました';
+        $('title').value = '';
+        $('body').value = '';
+        $('titleCount').textContent = 0;
+        $('bodyCount').textContent = 0;
+      }
+    } catch (e) {
+      status.textContent = '❌ 通信エラー: ' + e;
+    } finally {
+      $('send').disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

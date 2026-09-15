@@ -19,6 +19,10 @@ services:
       - api-data:/data
     networks:
       - internal
+    # ADMIN_TOKEN: 文化祭運営パネルからの配信を許可する共有シークレット。
+    # .env（Git管理外）から読み込む。未設定ならAPI側で機能自体を無効化する。
+    environment:
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
     # ─── セキュリティ強化 ───
     read_only: true          # ルートFSは読み取り専用（書けるのは /data のみ）
     security_opt:
@@ -46,8 +50,13 @@ services:
     ports:
       - "80:80"     # ACME(Let's Encrypt)チャレンジ + HTTPSへのリダイレクト
       - "443:443"
+    # Basic認証のbcryptハッシュはCaddyfileに直接書かず環境変数で渡す
+    # （'$' を含むためsed置換やcompose補間で壊れるのを避ける）。
+    environment:
+      - ADMIN_BASIC_AUTH_HASH=${ADMIN_BASIC_AUTH_HASH:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./admin_panel:/srv:ro   # 管理者パネルの静的ファイル（Basic認証の内側）
       - caddy-data:/data      # 証明書（消すと再取得になるので永続化）
       - caddy-config:/config
     networks:

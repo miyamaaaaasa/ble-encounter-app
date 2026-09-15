@@ -6,6 +6,7 @@ import '../core/ble_config.dart';
 import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart'
     show appProvider, AppState, AppNotifier, scanIntervalProvider;
+import '../providers/broadcast_provider.dart';
 import 'encounter_helpers.dart';
 import 'theme/palette.dart';
 import 'widgets/peer_icon.dart';
@@ -90,6 +91,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appProvider);
+    final broadcast = ref.watch(broadcastProvider);
 
     ref.listen<AppState>(appProvider, (prev, next) {
       if (next.hasNewEncounter && !(prev?.hasNewEncounter ?? false)) {
@@ -128,6 +130,54 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               trailing: _ScanBadge(running: state.isRunning, si: si),
             ),
           ),
+
+          // ─── 運営からのお知らせ（文化祭モード）─────────────────
+          if (broadcast.banner != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                child: SoftPanel(
+                  color: Palette.teal.withValues(alpha: 0.22),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('📣', style: TextStyle(fontSize: 22)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(broadcast.banner!.title,
+                                style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Palette.ink)),
+                            const SizedBox(height: 3),
+                            Text(broadcast.banner!.body,
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    height: 1.4,
+                                    color: Palette.ink)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () =>
+                            ref.read(broadcastProvider.notifier).dismissBanner(),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(Icons.close,
+                              size: 18, color: Palette.inkSoft),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // ─── すれ違いバナー ───────────────────────────────────
           if (_showBanner)

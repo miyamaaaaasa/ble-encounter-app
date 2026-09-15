@@ -69,3 +69,5 @@ qa_baseline/
 server/backup/rclone.conf
 server/backup/staging/
 server/backup/*.log
+server/.env
+server/Caddyfile.local

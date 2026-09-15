@@ -144,6 +144,33 @@ class ApiService {
     }
   }
 
+  // ─── お知らせ配信（文化祭運営用）─────────────────────────────────
+
+  /// 管理者が配信したお知らせを取得する。
+  ///
+  /// プッシュ通知ではなくポーリング方式。FCM等の外部サービスを導入せず
+  /// 自前サーバーで完結させるため、アプリ起動中のみ受信できる。
+  /// [sinceId] より新しいものだけが返るので、端末側は最後に読んだIDを保持する。
+  /// 通信エラー時は null（呼び出し側が既読IDを進めないようにするため、
+  /// 成功して0件の [] とは区別する）。
+  static Future<List<Map<String, dynamic>>?> fetchBroadcasts(int sinceId) async {
+    if (!isReady) return null; // 未登録時は黙って諦める（起動直後など）
+    try {
+      final res = await http
+          .get(Uri.parse('$apiBaseUrl/broadcasts?since=$sinceId'),
+              headers: _headers)
+          .timeout(_timeout);
+      if (res.statusCode != 200) {
+        debugPrint('[Api] fetchBroadcasts: ${res.statusCode}');
+        return null;
+      }
+      return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('[Api] fetchBroadcasts: $e');
+      return null;
+    }
+  }
+
   // ─── Profile ─────────────────────────────────────────────────────
 
   /// 表示名・色・ドット絵・バッジレベルをサーバーへ同期。

@@ -34,6 +34,34 @@
 		}
 	}
 
+	# 文化祭運営向け管理者パネル。二重で保護する:
+	#   1. ここ(Caddy)のBasic認証 — URLを知られても素通りできない
+	#   2. /admin/broadcast 自体はAPI側でX-Admin-Tokenの照合も要求する
+	# 検索エンジン等からの発見を避けるため robots.txt 相当のヘッダも付与。
+	handle /admin* {
+		# ハッシュは環境変数から読む。bcryptハッシュは '$' を含み、
+		# sed置換やシェル展開で壊れやすいため、値を一切加工せずに渡す。
+		basic_auth {
+			admin {$ADMIN_BASIC_AUTH_HASH}
+		}
+		header X-Robots-Tag "noindex, nofollow"
+
+		@broadcastPost {
+			method POST
+			path /admin/broadcast
+		}
+		handle @broadcastPost {
+			reverse_proxy api:8080 {
+				header_up X-Forwarded-For {remote_host}
+			}
+		}
+
+		handle {
+			root * /srv
+			file_server
+		}
+	}
+
 	handle {
 		respond 404
 	}

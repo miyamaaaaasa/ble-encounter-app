@@ -169,6 +169,71 @@ Google Cloud上のプロジェクト `hajimemashite-backup` で発行したデ�
 
 ---
 
+
+## 管理者パネル（文化祭運営用）
+
+アプリ利用者全員へお知らせを配信する。**プッシュ通知ではなくポーリング方式**の
+ため、アプリを起動している利用者にのみ届く（完全に閉じている間は届かない）。
+FCM等の外部サービスを導入せず自前サーバー完結を優先した結果の割り切り。
+
+- URL: `https://153-125-148-69.sslip.io/admin/`
+- 静的ファイル: `server/admin_panel/admin/index.html`（Caddyが`/srv`から配信）
+
+### 二重の認証
+
+| 層 | 仕組み | 目的 |
+|---|---|---|
+| Caddy | Basic認証（bcrypt） | URLを知られても素通りさせない |
+| API | `X-Admin-Token` の定数時間比較 | Basic認証を破られても配信させない |
+
+`ADMIN_TOKEN` 未設定時はAPI側で**エンドポイント自体を無効化**する
+（空文字と比較して突破されるのを防ぐ安全側デフォルト）。
+
+### 秘密情報の置き場所
+
+すべて `server/.env`（`chmod 600`・**Git管理外**）にのみ存在する。
+`Caddyfile` / `compose.yml` は環境変数参照のみを書き、実値を含まない。
+
+```
+ADMIN_TOKEN=<管理者トークン>
+ADMIN_BASIC_AUTH_HASH=$$2a$$14$$...   # 注意: '$' は '$$' にエスケープする
+```
+
+**なぜエスケープが必要か**: bcryptハッシュは `$` を含む。docker compose は
+`.env` 内の `$` を変数補間しようとするため、そのまま書くとハッシュが壊れて
+Caddyが起動失敗する（実際に踏んだ）。
+
+ハッシュの再生成:
+
+```bash
+docker run --rm caddy:2-alpine caddy hash-password --plaintext '<新しいパスワード>'
+```
+
+### API
+
+| メソッド | パス | 認証 | 用途 |
+|---|---|---|---|
+| POST | `/admin/broadcast` | Basic + `X-Admin-Token` | お知らせを1件配信 |
+| GET | `/v1/broadcasts?since=<id>` | ユーザーのBearer | 未読分の取得（アプリが2分間隔でポーリング） |
+
+入力制限: タイトル40文字・本文200文字。管理者APIは20回/分のレート制限。
+
+### ラズパイ等から配信する場合
+
+Web画面を使わず、同じAPIを叩けばよい。GPIOのボタン入力などに繋げる想定。
+
+```bash
+curl -u admin:<パスワード>   -X POST https://153-125-148-69.sslip.io/admin/broadcast   -H "X-Admin-Token: <ADMIN_TOKEN>"   -H "Content-Type: application/json"   -d '{"title":"開会のお知らせ","body":"まもなく始まります"}'
+```
+
+### デプロイ
+
+```bash
+cd server && sh deploy.sh     # 転送 → build → up -d までを一括実行
+```
+
+---
+
 ## 独自ドメインへ移行する場合
 
 1. DNSのAレコードを`153.125.148.69`に向ける
