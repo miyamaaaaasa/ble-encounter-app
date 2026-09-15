@@ -6,7 +6,9 @@
 <meta name="robots" content="noindex, nofollow">
 <title>はじめましてこんにちは — 管理者パネル</title>
 <style>
-  :root { color-scheme: light dark; }
+  /* 背景色をクリームで固定しているので、フォーム部品だけOSのダークモードに
+     引きずられて黒くなるのを防ぐ（黒地に黒文字で入力内容が読めなくなる）。 */
+  :root { color-scheme: light; }
   body {
     font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
     max-width: 480px; margin: 40px auto; padding: 0 20px;
@@ -17,7 +19,10 @@
   input, textarea {
     width: 100%; box-sizing: border-box; padding: 10px; margin-top: 6px;
     border: 1px solid #d8c9b3; border-radius: 8px; font-size: 15px;
+    background: #FFFDF8; color: #4A3C31;   /* 明示しないとダークモードで潰れる */
   }
+  input::placeholder, textarea::placeholder { color: #BFB0A0; }
+  input:focus, textarea:focus { outline: 2px solid #FF8A70; outline-offset: 1px; }
   textarea { resize: vertical; min-height: 70px; }
   button {
     margin-top: 20px; width: 100%; padding: 12px; border: none; border-radius: 10px;
@@ -58,8 +63,15 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
-  // トークンはこの端末のブラウザにのみ保存する（サーバーへは送信のたびに送るだけ）
-  $('token').value = localStorage.getItem('admin_token') || '';
+  // トークンはこの端末のブラウザにのみ保存する（サーバーへは送信のたびに送るだけ）。
+  // プライベートウィンドウやサイトデータ遮断時は localStorage 自体が例外を投げる。
+  // 素で呼ぶと以降のスクリプトが丸ごと止まり、ボタンが無反応になるため必ず包む。
+  const storage = {
+    get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 保存できなくても送信は可能 */ } },
+  };
+
+  $('token').value = storage.get('admin_token');
 
   $('title').addEventListener('input', () => $('titleCount').textContent = $('title').value.length);
   $('body').addEventListener('input', () => $('bodyCount').textContent = $('body').value.length);
@@ -87,7 +99,7 @@
         const t = await res.text();
         status.textContent = `❌ 送信失敗 (${res.status}): ${t}`;
       } else {
-        localStorage.setItem('admin_token', token);
+        storage.set('admin_token', token);
         status.textContent = '✅ 配信しました';
         $('title').value = '';
         $('body').value = '';
