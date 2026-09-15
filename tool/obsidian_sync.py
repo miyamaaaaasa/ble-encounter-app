@@ -148,7 +148,8 @@ def sync_index(synced: list[str]):
         "```",
         f"リポジトリ: {REPO}",
         "GitHub: https://github.com/miyamaaaaasa/ble-encounter-app",
-        "Supabase: fscchyuzjbnylofptsou (HazimemasiteKonnitiwa Project)",
+        "APIサーバー: https://153-125-148-69.sslip.io/v1 （さくらVPS・自前運用）",
+        "管理者パネル: https://153-125-148-69.sslip.io/admin/ （文化祭のお知らせ配信）",
         "署名鍵: android/keystore/release.jks（gitignore・要バックアップ）",
         "```",
         "\n## よく使うコマンド\n",
@@ -160,7 +161,7 @@ def sync_index(synced: list[str]):
         "bash  tool/qa_smoke.sh       # 無人スモークQA",
         "python tool/obsidian_sync.py # このvaultへ同期",
         "```",
-        "\n関連: [[ble-encounter-app|旧プロジェクトノート]] / [[auto-git-workflow]]",
+        "\n関連: [[ble-encounter-app|旧プロジェクトノート]] / [[auto-git-workflow]] / [[文化祭-お知らせ配信の使い方|文化祭: お知らせ配信の手順]]",
     ]
     (DEST / "index.md").write_text("\n".join(body), encoding="utf-8")
 
