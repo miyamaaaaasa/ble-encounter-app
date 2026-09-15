@@ -179,6 +179,26 @@ FCM等の外部サービスを導入せず自前サーバー完結を優先し�
 - URL: `https://153-125-148-69.sslip.io/admin/`
 - 静的ファイル: `server/admin_panel/admin/index.html`（Caddyが`/srv`から配信）
 
+### CSPの分離（重要）
+
+サイト全体のCSPは API 向けに `default-src 'none'` にしているが、これを管理画面にも
+適用すると**インラインCSS/JSもfetchも全てブロックされ、画面が崩れて送信ボタンが
+無反応になる**（実際に踏んだ）。しかもエラーはコンソールにしか出ないため、
+画面上は「押しても何も起きない」だけに見えて原因が分かりにくい。
+
+対処として、CSPはサイト全体の `header` ブロックには書かず、パス条件で分けている:
+
+| 対象 | CSP |
+|---|---|
+| `/admin*` 以外 | `default-src 'none'; frame-ancestors 'none'` |
+| `/admin*` | 上記に `script-src/style-src 'unsafe-inline'` と `connect-src 'self'` を追加 |
+
+**注意**: サイト直下の `header` は `handle` 内の `header` より後勝ちになるため、
+`handle` の中でCSPを上書きしようとしても効かない。必ずマッチャ（`@admin` /
+`@notAdmin`）で分けること。
+
+管理画面でも外部リソースの読み込みは引き続き禁止のまま。
+
 ### 二重の認証
 
 | 層 | 仕組み | 目的 |

@@ -17,15 +17,29 @@
 	encode gzip
 
 	# ─── セキュリティヘッダ ───
+	# 共通分。CSPだけは画面ごとに必要な緩和が異なるため、ここでは設定しない
+	# （サイト全体のheaderはhandle内のheaderより後勝ちになり、上書きできないため）。
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options    "nosniff"
 		X-Frame-Options           "DENY"
 		Referrer-Policy           "no-referrer"
-		Content-Security-Policy   "default-src 'none'; frame-ancestors 'none'"
 		# サーバー実装を隠す
 		-Server
 	}
+
+	# API・404応答向けの厳格CSP。管理画面(/admin)は対象外にする。
+	@notAdmin not path /admin*
+	header @notAdmin Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+
+	# 管理画面向けCSP。全体の default-src 'none' をそのまま適用すると
+	# **インラインCSS/JSもfetchも全てブロックされ、送信ボタンが無反応になる**
+	# （実際に踏んだ）。必要な分だけ個別に解放する。
+	#   script-src/style-src 'unsafe-inline' … ページ内に直接書いた<script>/<style>
+	#   connect-src 'self'                   … /admin/broadcast へのfetch
+	# 外部リソースの読み込みは引き続き一切禁止。
+	@admin path /admin*
+	header @admin Content-Security-Policy "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 	# APIのみ公開。それ以外のパスは404で即返し、探索コストを与えない。
 	handle /v1/* {
