@@ -295,6 +295,10 @@ class AppNotifier extends Notifier<AppState> {
       debugPrint('[App] start badge awarded');
     }
 
+    // 名前・色・自己紹介をサーバーへ反映する。これが無いと、設定を変えても
+    // すれ違った相手には古い内容（初期値）のままが見え続ける。
+    _syncProfileToServer();
+
     if (state.isRunning) {
       debugPrint('[App] profile updated, next cycle will use new payload');
     } else if (isFirstSave) {
