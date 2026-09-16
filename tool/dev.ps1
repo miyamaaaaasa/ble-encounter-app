@@ -57,7 +57,7 @@ function Invoke-Deploy {
     foreach ($d in Get-Devices) {
         Write-Host "== deploy -> $d ==" -ForegroundColor Cyan
         adb -s $d install -r $apk
-        adb -s $d shell am start -n com.example.ble_encounter/.MainActivity | Out-Null
+        adb -s $d shell am start -n jp.hajimemashite.app/.MainActivity | Out-Null
     }
 }
 

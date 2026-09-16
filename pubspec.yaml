@@ -1,7 +1,7 @@
 name: ble_encounter
 description: BLEすれ違い検知アプリ
 publish_to: 'none'
-version: 1.9.0+47
+version: 1.9.1+48
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -28,6 +28,9 @@ dependencies:
 
   # パーミッション要求
   permission_handler: ^11.3.1
+
+  # Android バージョン判定（位置情報権限の要否をSDKで分岐するため）
+  device_info_plus: ^10.1.2
 
   # 一時 ID 生成
   uuid: ^4.4.2

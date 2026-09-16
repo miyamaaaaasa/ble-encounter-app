@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 class GattService {
-  static const _channel = MethodChannel('com.example.ble_encounter/gatt');
+  static const _channel = MethodChannel('jp.hajimemashite.app/gatt');
 
   Future<void> startServer(String profileJson) =>
       _channel.invokeMethod('startGattServer', {'profileJson': profileJson});

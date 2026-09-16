@@ -883,6 +883,31 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"total": total, "users": out})
 }
 
+// DELETE /v1/account — 利用者自身によるデータ削除
+//
+// Google Play のデータ削除ポリシー対応。アプリが自動で匿名アカウントを作る以上、
+// 利用者が自分の意思で消せる経路を必ず用意する必要がある。
+//
+// 削除するもの: users の行（display_name / color / piece_data / 自己紹介 /
+// last_seen など全て）と、その利用者が発行した tokens（外部キーのCASCADEで連動）。
+// 削除後はそのAPIキーでは認証できなくなり、相手側から解決もできなくなる。
+func handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
+	uid, ok := authUser(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if _, err := db.Exec("DELETE FROM users WHERE id = ?", uid); err != nil {
+		log.Printf("delete account: %v", err)
+		writeErr(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	// 間引き用キャッシュにも残さない
+	lastSeenCache.Delete(uid)
+	log.Printf("account deleted")
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if err := db.Ping(); err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "db down")
@@ -975,6 +1000,7 @@ func main() {
 	mux.HandleFunc("/v1/tokens/issue", withCommon(handleIssueToken, http.MethodPost, true))
 	mux.HandleFunc("/v1/tokens/resolve", withCommon(handleResolveTokens, http.MethodPost, true))
 	mux.HandleFunc("/v1/profile", withCommon(handleProfile, http.MethodPost, true))
+	mux.HandleFunc("/v1/account", withCommon(handleDeleteAccount, http.MethodDelete, true))
 	mux.HandleFunc("/v1/broadcasts", withCommon(handleBroadcasts, http.MethodGet, true))
 	// 管理者API。Caddy側でBasic認証を通した上で、さらにX-Admin-Tokenを検証する。
 	mux.HandleFunc("/admin/api/broadcast", withCommon(handleAdminBroadcast, http.MethodPost, false))

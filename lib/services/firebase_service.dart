@@ -6,7 +6,7 @@ import 'notification_service.dart';
 //
 // 【有効化手順】
 // 1. https://console.firebase.google.com でプロジェクト作成
-// 2. Android アプリを追加（パッケージ名: com.example.ble_encounter）
+// 2. Android アプリを追加（パッケージ名: jp.hajimemashite.app）
 // 3. google-services.json を android/app/ に配置
 // 4. pubspec.yaml に追加:
 //      firebase_core: ^3.0.0

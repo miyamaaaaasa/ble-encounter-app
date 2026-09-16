@@ -5,6 +5,7 @@ import '../core/ble_config.dart';
 import '../providers/ble_providers.dart'
     show appProvider, scanIntervalProvider;
 import '../providers/theme_provider.dart';
+import '../services/api_service.dart';
 import '../services/data_export_service.dart';
 import '../services/game_storage.dart';
 import '../services/notification_service.dart';
@@ -91,6 +92,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _vibrationEnabled = value);
     await NotificationService.setPref(
         NotificationService.prefVibrationEnabled, value);
+  }
+
+  /// サーバー上の自分のデータを削除する（Google Playのデータ削除要件）。
+  ///
+  /// 取り消せない操作なので、確認ダイアログで明示的な同意を取ってから実行する。
+  /// 端末内のデータは既存の「データをエクスポート」で退避できる旨も案内する。
+  Future<void> _onDeleteServerData() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('サーバーのデータを削除'),
+        content: const Text(
+          'サーバーに保存されている、あなたの名前・アバターの色・ドット絵・'
+          '自己紹介を完全に削除します。\n\n'
+          '削除すると、これから先あなたとすれ違った人には'
+          'あなたの情報が表示されなくなります。\n\n'
+          'この操作は取り消せません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('やめる'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('削除する'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final success = await ApiService.deleteAccount();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(success
+          ? 'サーバーのデータを削除しました'
+          : '削除できませんでした。通信状況を確認してもう一度お試しください'),
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   Future<void> _onExport() async {
@@ -377,6 +419,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: const Text('バックアップファイルからデータを復元（上書き）'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _onImport,
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('サーバーのデータを削除',
+                  style: TextStyle(color: Colors.red)),
+              subtitle: const Text(
+                  '名前・アバター・ドット絵・自己紹介をサーバーから消します（取り消せません）'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _onDeleteServerData,
             ),
 
             const Divider(indent: 16, endIndent: 16),

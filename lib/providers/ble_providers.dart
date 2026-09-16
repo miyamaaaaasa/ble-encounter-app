@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -303,6 +304,19 @@ class AppNotifier extends Notifier<AppState> {
 
   // ─── Permissions ─────────────────────────────────────────────────────────
 
+  /// BLEスキャンに位置情報権限が要る環境か（Android 11以下）を判定する。
+  /// 判定できない場合は要求しない側に倒す（誤ったエラー表示を避けるため）。
+  Future<bool> _needsLegacyLocationPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return false;
+    try {
+      final info = await DeviceInfoPlugin().androidInfo;
+      return info.version.sdkInt <= 30;
+    } catch (e) {
+      debugPrint('[Perm] sdkInt取得に失敗: $e');
+      return false;
+    }
+  }
+
   Future<bool> requestPermissions() async {
     // iOS: bluetoothScan/Advertise/Connect は NSBluetoothAlwaysUsageDescription にマッピングされる
     // Android: 個別権限が必要
@@ -310,7 +324,10 @@ class AppNotifier extends Notifier<AppState> {
       Permission.bluetoothScan,
       Permission.bluetoothAdvertise,
       Permission.bluetoothConnect,
-      if (defaultTargetPlatform != TargetPlatform.iOS) Permission.locationWhenInUse,
+      // 位置情報は Android 11 以下でのみ BLE スキャンに必要。
+      // Android 12+ ではマニフェスト側で maxSdkVersion=30 にしており権限自体が
+      // 存在しないため、要求すると常に拒否扱いになり誤ったエラーが出る。
+      if (await _needsLegacyLocationPermission()) Permission.locationWhenInUse,
       Permission.notification,
     ];
 

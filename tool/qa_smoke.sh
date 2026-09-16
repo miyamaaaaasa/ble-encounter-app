@@ -25,7 +25,7 @@ fi
 # 1.5) バージョン照合ゲート:
 # インストール失敗を見逃して「古いAPKをQAして合格」する事故を防ぐ。
 WANT=$(grep -o '^version: [0-9.]*' pubspec.yaml | awk '{print $2}')
-GOT=$(A shell dumpsys package com.example.ble_encounter 2>/dev/null \
+GOT=$(A shell dumpsys package jp.hajimemashite.app 2>/dev/null \
       | grep -o 'versionName=[0-9.]*' | head -1 | cut -d= -f2)
 if [ -n "$WANT" ] && [ "$WANT" != "$GOT" ]; then
   echo "NG: VERSION MISMATCH device=$GOT expected=$WANT"
@@ -36,8 +36,8 @@ echo "version on device: $GOT ✓"
 
 # 2) ログをクリアして起動
 A logcat -c 2>/dev/null
-A shell am force-stop com.example.ble_encounter
-A shell am start -n com.example.ble_encounter/.MainActivity >/dev/null
+A shell am force-stop jp.hajimemashite.app
+A shell am start -n jp.hajimemashite.app/.MainActivity >/dev/null
 sleep 6
 
 # 3) 解像度から比率座標を計算（GameDock: 下端マージン内の7等分）
@@ -59,7 +59,7 @@ A logcat -d 2>/dev/null | grep -E "FATAL EXCEPTION|AndroidRuntime: |flutter : .*
   | grep -v "server unreachable" > "$OUT/errors.txt" || true
 
 # 5) プロセス生存確認（クラッシュ即死検出）
-ALIVE=$(A shell pidof com.example.ble_encounter | tr -d '\r')
+ALIVE=$(A shell pidof jp.hajimemashite.app | tr -d '\r')
 
 echo "== result =="
 if [ -z "$ALIVE" ]; then

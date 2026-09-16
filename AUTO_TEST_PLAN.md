@@ -55,14 +55,14 @@ pwsh tool/dev.ps1 check && pwsh tool/dev.ps1 build \
 
 ### R2: 永続化回帰（自動・約2分）
 ```
-adb shell am force-stop com.example.ble_encounter
-adb shell am start -n com.example.ble_encounter/.MainActivity
+adb shell am force-stop jp.hajimemashite.app
+adb shell am start -n jp.hajimemashite.app/.MainActivity
 # → logs/スクショで カケラ枚数・アイコン・履歴・テーマ設定 が残存すること
 ```
 
 ### R3: 初回体験（エミュ推奨・約5分）
 ```
-adb uninstall com.example.ble_encounter → install → 起動
+adb uninstall jp.hajimemashite.app → install → 起動
 # → オンボ9ページ→プロフィール→権限2種→ホーム到達をスクショ列で確認
 ```
 

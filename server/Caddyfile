@@ -28,9 +28,14 @@
 		-Server
 	}
 
-	# API・404応答向けの厳格CSP。管理画面(/admin)は対象外にする。
-	@notAdmin not path /admin*
-	header @notAdmin Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+	# API・404応答向けの厳格CSP。管理画面とプライバシーポリシーは対象外にする。
+	@strictCsp not path /admin* /privacy*
+	header @strictCsp Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+
+	# プライバシーポリシー（公開ページ）。ページ内に直接書いた<style>のみ許可する。
+	# スクリプトも外部リソースも使わないため script-src は開けない。
+	@privacy path /privacy*
+	header @privacy Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 	# 管理画面向けCSP。全体の default-src 'none' をそのまま適用すると
 	# **インラインCSS/JSもfetchも全てブロックされ、送信ボタンが無反応になる**
@@ -46,6 +51,13 @@
 		reverse_proxy api:8080 {
 			header_up X-Forwarded-For {remote_host}
 		}
+	}
+
+	# プライバシーポリシー。Google Playの審査やユーザーが誰でも見られる必要があるため、
+	# 認証は一切かけない。X-Frame-Options等の共通ヘッダはそのまま適用される。
+	handle /privacy* {
+		root * /srv
+		file_server
 	}
 
 	# 文化祭運営向け管理者パネル。二重で保護する:

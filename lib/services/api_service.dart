@@ -213,6 +213,33 @@ class ApiService {
     }
   }
 
+  /// サーバー上の自分のデータを完全に削除する（Google Playのデータ削除要件）。
+  ///
+  /// 成功したら端末に保存した資格情報も破棄するため、以後は次回起動時に
+  /// 新しい匿名ユーザーとして登録し直される（＝別人として再出発する）。
+  static Future<bool> deleteAccount() async {
+    if (!isReady) return true; // 未登録なら消すものが無い
+    try {
+      final res = await http
+          .delete(Uri.parse('$apiBaseUrl/account'), headers: _headers)
+          .timeout(_timeout);
+      if (res.statusCode != 200) {
+        debugPrint('[Api] deleteAccount: ${res.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('[Api] deleteAccount: $e');
+      return false;
+    }
+    await _store.delete(key: _keyApiKey);
+    await _store.delete(key: _keyUserId);
+    _apiKey = null;
+    _userId = null;
+    _initFuture = null; // 次回 init() で新規登録できるようにする
+    debugPrint('[Api] account deleted');
+    return true;
+  }
+
   /// ドット絵だけを更新（エディタ保存時）
   static Future<bool> savePieceData(List<int> pixels) async {
     if (!await _ready()) return false;

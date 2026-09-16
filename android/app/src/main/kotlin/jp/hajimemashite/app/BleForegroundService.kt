@@ -1,4 +1,4 @@
-package com.example.ble_encounter
+package jp.hajimemashite.app
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -14,8 +14,8 @@ import androidx.core.app.NotificationCompat
 class BleForegroundService : Service() {
 
     companion object {
-        const val ACTION_START = "com.example.ble_encounter.START"
-        const val ACTION_STOP  = "com.example.ble_encounter.STOP"
+        const val ACTION_START = "jp.hajimemashite.app.START"
+        const val ACTION_STOP  = "jp.hajimemashite.app.STOP"
         private const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "ble_encounter_fg"
     }

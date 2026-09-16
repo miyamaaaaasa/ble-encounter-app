@@ -1,4 +1,4 @@
-package com.example.ble_encounter
+package jp.hajimemashite.app
 
 import android.bluetooth.*
 import android.content.Context

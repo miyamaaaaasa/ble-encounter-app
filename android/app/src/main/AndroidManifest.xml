@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- ─── ネットワーク（Supabase通信） ─── -->
+    <!-- ─── ネットワーク（自前APIサーバーとの通信） ─── -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
@@ -17,9 +17,14 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- BLE スキャンに OS が要求する位置情報パーミッション -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- BLEスキャンのため OS が要求する位置情報（Android 11以下のみ）。
+         Android 12+ は BLUETOOTH_SCAN の neverForLocation で足りるため、
+         maxSdkVersion=30 を付けて新しい端末では要求しない。
+         位置情報そのものは取得も送信もしない（アプリの絶対維持事項: GPS不使用）。-->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:maxSdkVersion="30" />
 
     <!-- ─── Foreground Service ─── -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -27,22 +32,17 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- ─── 通知スケジュール ─── -->
+    <!-- 開門通知の時刻ずれを抑えるためのアラーム。ユーザーが許可しない端末では
+         コード側で inexact にフォールバックする（NotificationService参照）。
+         Play Console で「正確なアラーム」の申告が必要。-->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- ─── バッテリー最適化除外リクエスト ─── -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- ─── 生存シグナル振動 ─── -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- ─── 写真アクセス (Android 13+) ─── -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <!-- 旧 Android 向け -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
 
     <uses-feature
         android:name="android.hardware.bluetooth_le"

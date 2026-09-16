@@ -1,4 +1,4 @@
-package com.example.ble_encounter
+package jp.hajimemashite.app
 
 import android.content.Intent
 import android.os.Build
@@ -8,8 +8,8 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
-    private val advertiserChannelName = "com.example.ble_encounter/ble_advertiser"
-    private val gattChannelName = "com.example.ble_encounter/gatt"
+    private val advertiserChannelName = "jp.hajimemashite.app/ble_advertiser"
+    private val gattChannelName = "jp.hajimemashite.app/gatt"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
