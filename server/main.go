@@ -170,6 +170,15 @@ CREATE TABLE IF NOT EXISTS broadcasts (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_broadcasts_created ON broadcasts(created_at);
+
+CREATE TABLE IF NOT EXISTS mutual_encounters (
+  target_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  peer_user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  met_day        INTEGER NOT NULL,
+  met_at         INTEGER NOT NULL,
+  PRIMARY KEY (target_user_id, peer_user_id, met_day)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_mutual_target ON mutual_encounters(target_user_id, met_at);
 `
 	if _, err = db.Exec(schema); err != nil {
 		return err
@@ -401,6 +410,15 @@ func handleResolveTokens(w http.ResponseWriter, r *http.Request) {
 		ru.PieceData = unpackPixels(packed)
 		out = append(out, ru)
 	}
+
+	// 相手側にも「この人とすれ違った」を残す。片方向の検出しかできない
+	// 組み合わせ（iOSバックグラウンド等）でも双方の出会いとして成立させる。
+	peerIDs := make([]string, 0, len(out))
+	for _, ru := range out {
+		peerIDs = append(peerIDs, ru.UserID)
+	}
+	recordMutualEncounters(uid, peerIDs, time.Now().Unix())
+
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -908,6 +926,92 @@ func handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// ─── すれ違いの相互記録 ─────────────────────────────────────────────
+//
+// 片方向の検出でも、両者の出会いとして成立させるための仕組み。
+//
+// 背景: iOSはバックグラウンドに入ると、広告がApple独自形式の領域へ移るため
+// Android端末からは検出できない（OSの制約で回避不能）。一方その逆、
+// iOSがバックグラウンドからAndroidを検出することは可能。
+// そこで「AがBのトークンを解決したら、B側にもAとの出会いを記録する」ことで、
+// 片側しか検出できない組み合わせでも双方の画面に出会いが現れるようにする。
+//
+// プライバシー上は等価。どちらの記録も「2台が近くにあった」という同じ事実を
+// 表すだけで、位置も正確な時刻も持たない。
+
+// AがBのトークンを解決したとき、B側に「Aとすれ違った」を記録する。
+// 同じ相手・同じ日の重複は作らない（何度解決しても1件にまとめる）。
+func recordMutualEncounters(finderID string, peerIDs []string, metAt int64) {
+	if len(peerIDs) == 0 {
+		return
+	}
+	day := metAt / 86400
+	for _, peerID := range peerIDs {
+		if peerID == finderID {
+			continue // 自分自身は記録しない
+		}
+		_, err := db.Exec(
+			"INSERT INTO mutual_encounters (target_user_id, peer_user_id, met_day, met_at)"+
+				" VALUES (?, ?, ?, ?)"+
+				" ON CONFLICT(target_user_id, peer_user_id, met_day)"+
+				" DO UPDATE SET met_at = excluded.met_at",
+			peerID, finderID, day, metAt)
+		if err != nil {
+			log.Printf("mutual: %v", err)
+		}
+	}
+}
+
+// GET /v1/encounters/mutual — 自分を検出した相手の一覧
+//
+// カーソルは持たず、有効期間内のものを毎回返す。アプリ側は相手IDで
+// 突き合わせて重ねるだけでよく、取りこぼしも二重登録も起きない。
+func handleMutualEncounters(w http.ResponseWriter, r *http.Request) {
+	uid, ok := authUser(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	rows, err := db.Query(
+		"SELECT m.peer_user_id, m.met_at, u.display_name, u.color_index, u.piece_data,"+
+			" u.badge_level, u.intro_status, u.intro_hobby_cat, u.intro_hobby_det, u.intro_phrase"+
+			" FROM mutual_encounters m JOIN users u ON u.id = m.peer_user_id"+
+			" WHERE m.target_user_id = ? AND m.met_at > ?"+
+			" ORDER BY m.met_at DESC LIMIT 200",
+		uid, time.Now().Add(-resolveWindow).Unix())
+	if err != nil {
+		log.Printf("mutual list: %v", err)
+		writeErr(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	defer rows.Close()
+
+	out := []map[string]any{}
+	for rows.Next() {
+		var peerID, name string
+		var metAt int64
+		var color, badge, introS, introHC, introHD, introP int
+		var packed []byte
+		if err := rows.Scan(&peerID, &metAt, &name, &color, &packed, &badge,
+			&introS, &introHC, &introHD, &introP); err != nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"user_id":         peerID,
+			"met_at":          metAt,
+			"display_name":    name,
+			"color_index":     color,
+			"piece_data":      unpackPixels(packed),
+			"badge_level":     badge,
+			"intro_status":    introS,
+			"intro_hobby_cat": introHC,
+			"intro_hobby_det": introHD,
+			"intro_phrase":    introP,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	if err := db.Ping(); err != nil {
 		writeErr(w, http.StatusServiceUnavailable, "db down")
@@ -1002,6 +1106,7 @@ func main() {
 	mux.HandleFunc("/v1/profile", withCommon(handleProfile, http.MethodPost, true))
 	mux.HandleFunc("/v1/account", withCommon(handleDeleteAccount, http.MethodDelete, true))
 	mux.HandleFunc("/v1/broadcasts", withCommon(handleBroadcasts, http.MethodGet, true))
+	mux.HandleFunc("/v1/encounters/mutual", withCommon(handleMutualEncounters, http.MethodGet, true))
 	// 管理者API。Caddy側でBasic認証を通した上で、さらにX-Admin-Tokenを検証する。
 	mux.HandleFunc("/admin/api/broadcast", withCommon(handleAdminBroadcast, http.MethodPost, false))
 	mux.HandleFunc("/admin/api/stats", withCommon(handleAdminStats, http.MethodGet, false))
@@ -1027,6 +1132,8 @@ func main() {
 		_ = os.MkdirAll(backupDir, 0o700)
 		time.Sleep(30 * time.Second) // 起動直後に1回（デプロイ直後の復旧点を確保）
 		for {
+			_, _ = db.Exec("DELETE FROM mutual_encounters WHERE met_at < ?",
+				time.Now().Add(-resolveWindow).Unix())
 			if res, err := db.Exec(`DELETE FROM tokens WHERE issued_at < ?`,
 				time.Now().Add(-resolveWindow).Unix()); err == nil {
 				n, _ := res.RowsAffected()

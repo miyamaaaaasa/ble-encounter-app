@@ -47,6 +47,7 @@ DOCS = {
     "CLAUDE.md": "恒久ルール",
     "DESIGN_HANDOFF.md": "デザイン引き継ぎ手順",
     "PLAY_RELEASE.md": "Google Play公開手順",
+    "IOS_PLAN.md": "iOS版の開発計画",
     "server/README.md": "サーバー運用手順",
 }
 
