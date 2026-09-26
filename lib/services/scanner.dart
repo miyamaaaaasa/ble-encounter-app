@@ -54,6 +54,26 @@ class BleScanner {
   // macAddress → partial data（profile 未受信分）
   final _partialPeers = <String, _PartialData>{};
 
+  // ─── iOS端末からのトークン取得（GATT経由）───────────────────────────
+  // iOSは電波にトークン（manufacturer data）を載せられないため、サービスUUIDだけを
+  // 流している。そういう端末を見つけたら接続してcharacteristicからトークンを読む。
+  // 接続は重くバッテリーも使うので、同時に1台・結果はキャッシュして使い回す。
+  static final _serviceGuid   = Guid(Constants.serviceUuid);
+  static final _tokenCharGuid = Guid(Constants.tokenCharUuid);
+  static const _gattGrace     = Duration(seconds: 2);   // Android誤認防止の猶予
+  static const _gattTokenTtl  = Duration(minutes: 30);  // 読んだトークンの再利用期間
+  static const _gattRetryWait = Duration(seconds: 60);  // 失敗後に再挑戦するまで
+
+  // remoteId → GATTで読んだトークン（接続せずに再利用するため）
+  final _gattTokens       = <String, ({String hex, DateTime readAt})>{};
+  // remoteId → トークン無しの電波を最初に見た時刻
+  final _noTokenFirstSeen = <String, DateTime>{};
+  // remoteId → 次にGATTを試してよい時刻
+  final _gattNextTry      = <String, DateTime>{};
+  // GATT読み取りの対象外（電波にトークンを載せている＝Android、または対応外の端末）
+  final _skipGatt         = <String>{};
+  bool _gattBusy = false;
+
   Stream<EncounterEvent> get encounters => _encounterCtrl.stream;
   Stream<String>         get departures => _departureCtrl.stream;
 
@@ -67,6 +87,11 @@ class BleScanner {
     _activePeers.clear();
     _emittedPeers.clear();
     _partialPeers.clear();
+    _noTokenFirstSeen.clear();
+    final now = DateTime.now();
+    _gattTokens.removeWhere((_, v) => now.difference(v.readAt) > _gattTokenTtl);
+    _gattNextTry.removeWhere((_, t) => now.isAfter(t));
+    if (_skipGatt.length > 500) _skipGatt.clear(); // AndroidのMACは入れ替わるので溜まる
 
     final adapterState = await FlutterBluePlus.adapterState.first;
     if (adapterState != BluetoothAdapterState.on) return;
@@ -142,7 +167,13 @@ class BleScanner {
     final mfData = result.advertisementData.manufacturerData;
 
     final payload = mfData[_mfId];
-    if (payload == null || payload.length < 17 || payload[0] != _magicPeer) return;
+    if (payload == null || payload.length < 17 || payload[0] != _magicPeer) {
+      // トークンが載っていない＝iOS端末の可能性。GATTで読みに行くか判断する
+      _maybeReadViaGatt(result);
+      return;
+    }
+    // 電波にトークンを載せている端末（Android）はGATT読み取りの対象外
+    _skipGatt.add(mac);
 
     final peerId = payload
         .skip(1)
@@ -226,6 +257,78 @@ class BleScanner {
 
   // 0xFF = 未回答（kNotSet = -1）
   static int _decodeByte(int b) => b == 0xFF ? -1 : b & 0xFF;
+
+  /// トークンを載せていない電波を見つけたとき、GATTで読みに行くかを判断する。
+  void _maybeReadViaGatt(ScanResult result) {
+    final id = result.device.remoteId.str;
+    if (_skipGatt.contains(id)) return;
+
+    // iOSでのスキャンはサービスUUIDで絞り込んでいるので、届いた時点で対象。
+    // （iOS同士の背面広告はUUIDが特殊な領域に入り、一覧に出ないことがある）
+    final hasService = defaultTargetPlatform == TargetPlatform.iOS ||
+        result.advertisementData.serviceUuids.contains(_serviceGuid);
+    if (!hasService) return;
+
+    final now = DateTime.now();
+    final cached = _gattTokens[id];
+    if (cached != null && now.difference(cached.readAt) < _gattTokenTtl) {
+      _onTokenFound(cached.hex, id, result.rssi); // 接続せずに再利用
+      return;
+    }
+
+    // Androidの電波は「サービスUUID」と「トークン」が別パケットで届く。
+    // トークン側が届く前の一瞬をiOSと誤認して接続しないよう、少し様子を見る。
+    final first = _noTokenFirstSeen.putIfAbsent(id, () => now);
+    if (now.difference(first) < _gattGrace) return;
+
+    if (_gattBusy) return;
+    final next = _gattNextTry[id];
+    if (next != null && now.isBefore(next)) return;
+
+    _readTokenViaGatt(result.device, result.rssi);
+  }
+
+  Future<void> _readTokenViaGatt(BluetoothDevice device, int rssi) async {
+    final id = device.remoteId.str;
+    _gattBusy = true;
+    _gattNextTry[id] = DateTime.now().add(_gattRetryWait); // 失敗時の既定
+    var found = false;
+    try {
+      await device.connect(timeout: const Duration(seconds: 6), mtu: null);
+      final services = await device.discoverServices(timeout: 8);
+      for (final svc in services) {
+        if (svc.uuid != _serviceGuid) continue;
+        for (final c in svc.characteristics) {
+          if (c.uuid != _tokenCharGuid) continue;
+          final v = await c.read(timeout: 5);
+          if (v.length >= 16) {
+            final hex = v
+                .take(16)
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join();
+            _gattTokens[id] = (hex: hex, readAt: DateTime.now());
+            _gattNextTry.remove(id);
+            found = true;
+            debugPrint('[BleScanner] GATT token id=${hex.substring(28)} dev=$id');
+            _onTokenFound(hex, id, rssi);
+          }
+        }
+      }
+      // 接続できたのにトークンが無い＝このアプリの端末ではない。以後は試さない
+      if (!found) _skipGatt.add(id);
+    } catch (e) {
+      debugPrint('[BleScanner] GATT read failed dev=$id: $e');
+    } finally {
+      try { await device.disconnect(); } catch (_) {}
+      _gattBusy = false;
+    }
+  }
+
+  void _onTokenFound(String peerId, String mac, int rssi) {
+    if (peerId == _myPeerIdHex) return;
+    _activePeers[peerId] = DateTime.now();
+    _tryEmitToken(peerId, mac, '', 0, -1, const TemplateMessage(), rssi);
+  }
 
   void _tryEmitToken(String peerId, String mac, String name,
       int colorIndex, int prefecture, TemplateMessage template, int rssi,

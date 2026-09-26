@@ -5,17 +5,18 @@ import '../core/constants.dart';
 
 /// Kotlin の BluetoothLeAdvertiser を Platform Channel 経由で操作するラッパー。
 ///
-/// ネイティブ実装はAndroidにしか無い。iOSで呼ぶと MissingPluginException になり、
-/// 呼び出し側の起動処理ごと中断してスキャン（検出）まで止まってしまうため、
-/// Android以外では何もしない。
+/// ネイティブ実装: Android は BleAdvertiserChannel.kt、iOS は AppDelegate.swift の
+/// BleAdvertiserPlugin。それ以外のプラットフォームでは何もしない
+/// （未実装のまま呼ぶと MissingPluginException で起動処理ごと止まるため）。
 ///
-/// iOSは当面「見つける専門」として参加する。iOSがAndroidを検出すれば、
-/// サーバーの相互記録（/v1/encounters/mutual）によってAndroid側にも出会いが残る。
-/// iOSから電波を出す実装（CoreBluetoothのPeripheral）は IOS_PLAN.md の残作業。
+/// iOSはトークンを電波に載せられないため、サービスUUIDのみを流し、
+/// トークンはGATT経由で渡す（受信側の処理は scanner.dart の _readTokenViaGatt）。
 class BleAdvertiser {
   static const _channel = MethodChannel(Constants.methodChannel);
 
-  static bool get _supported => defaultTargetPlatform == TargetPlatform.android;
+  static bool get _supported =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
 
   Future<void> startAdvertise(Uint8List peerId, Uint8List profilePayload) async {
     if (!_supported) return;
