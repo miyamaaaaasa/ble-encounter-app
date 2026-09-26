@@ -40,7 +40,7 @@ Macを入手したので iOS 版に着手する。最終更新: 2026-09-26
 | `recordMutualEncounters()`（resolve時に相手側へ記録） | 済 |
 | `GET /v1/encounters/mutual` | 済 |
 | 48時間で自動削除 | 済（メンテナンスgoroutine） |
-| **アプリ側の取り込み** | **未** |
+| アプリ側の取り込み | 済（`_mergeMutualEncounters()`。実機確認は未） |
 
 検証済み: AがBのトークンを解決すると、B側の `/v1/encounters/mutual` にAが現れ、
 A側には現れない（自分で検出済みのため二重にならない）。
@@ -49,12 +49,14 @@ A側には現れない（自分で検出済みのため二重にならない）�
 
 ## 残作業
 
-### 1. アプリ側で相互記録を取り込む（Android/iOS共通・先にやる）
+### 1. アプリ側で相互記録を取り込む（済・実機確認は未）
 
-`ApiService.fetchMutualEncounters()` を追加し、`_autoResolveNow()` と同じ経路で
-`upsertFromServerProfile()` へ流す。相手IDで突き合わせるだけなので二重登録は起きない。
+`ApiService.fetchMutualEncounters()` と `_mergeMutualEncounters()` を実装済み。
+`_autoResolveNow()` の**先頭**で呼ぶ（保留トークンが無くても実行する必要がある。
+自分が誰も検出していなくても、相手が自分を検出している可能性があるため）。
 
-**これはiOSより先にやる価値がある** — Android同士でも検出の取りこぼしが減るため。
+**未検証**: 端末が接続されていないため実機での確認ができていない。
+2台つないで、片方だけがもう片方を検出する状況を作って確かめること。
 
 ### 2. iOSのBLE実装（Swift）
 

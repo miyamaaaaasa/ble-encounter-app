@@ -438,8 +438,46 @@ class AppNotifier extends Notifier<AppState> {
     debugPrint('[App] rescued unrevealed encounters from past days');
   }
 
+  /// 「自分を検出した相手」をサーバーから取り込む。
+  ///
+  /// BLEの検出は双方向に成立するとは限らない（iOSのバックグラウンド広告は
+  /// Androidから見えない等）。サーバーが片方向の検出を両者の出会いとして
+  /// 記録しているので、ここで取り込むことで取りこぼしが埋まる。
+  /// 相手IDで突き合わせるため、既に自分で検出済みの相手は重複しない。
+  Future<void> _mergeMutualEncounters() async {
+    try {
+      final list = await ApiService.fetchMutualEncounters();
+      if (list == null || list.isEmpty) return;
+      var merged = 0;
+      for (final m in list) {
+        final peerId = m['user_id'] as String?;
+        if (peerId == null) continue;
+        final metAtSec = (m['met_at'] as num?)?.toInt();
+        final pixels = (m['piece_data'] as List?)?.cast<num>()
+            .map((e) => e.toInt()).toList();
+        await upsertFromServerProfile(
+          peerId:     peerId,
+          name:       m['display_name'] as String? ?? '???',
+          colorIndex: (m['color_index'] as num?)?.toInt() ?? 0,
+          metAt:      metAtSec != null
+              ? DateTime.fromMillisecondsSinceEpoch(metAtSec * 1000)
+              : DateTime.now(),
+          badgeLevel: (m['badge_level'] as num?)?.toInt() ?? 0,
+          pixels:     (pixels != null && pixels.isNotEmpty) ? pixels : null,
+        );
+        merged++;
+      }
+      debugPrint('[Mutual] merged $merged encounters detected by others');
+    } catch (e) {
+      debugPrint('[Mutual] error: $e');
+    }
+  }
+
   Future<void> _autoResolveNow() async {
     await _rescuePastDays();
+    // 自分が誰も検出していなくても、相手が自分を検出している可能性がある。
+    // 保留トークンの有無に関わらず取り込む（early returnより前に置く）。
+    await _mergeMutualEncounters();
     try {
       final pending = await PendingScanStorage.getAllTokens();
       if (pending.isEmpty) return;

@@ -174,6 +174,34 @@ class ApiService {
     }
   }
 
+  // ─── すれ違いの相互記録 ───────────────────────────────────────────
+
+  /// 「自分を検出した相手」の一覧を取得する。
+  ///
+  /// BLEの検出は必ずしも双方向に成立しない。とくにiOSはバックグラウンドに入ると
+  /// 広告がApple独自形式へ移り、Android端末からは検出できない（OSの制約）。
+  /// そこでサーバーが「AがBを解決したらB側にも記録する」ため、ここを取り込めば
+  /// 片方向しか検出できない組み合わせでも出会いが成立する。
+  ///
+  /// 相手IDで突き合わせて重ねるだけなので、何度呼んでも二重登録は起きない。
+  /// 通信エラー時は null（呼び出し側が無言で諦められるように空と区別する）。
+  static Future<List<Map<String, dynamic>>?> fetchMutualEncounters() async {
+    if (!await _ready()) return null;
+    try {
+      final res = await http
+          .get(Uri.parse('$apiBaseUrl/encounters/mutual'), headers: _headers)
+          .timeout(_timeout);
+      if (res.statusCode != 200) {
+        debugPrint('[Api] fetchMutual: ${res.statusCode}');
+        return null;
+      }
+      return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      debugPrint('[Api] fetchMutual: $e');
+      return null;
+    }
+  }
+
   // ─── Profile ─────────────────────────────────────────────────────
 
   /// 表示名・色・ドット絵・バッジレベルをサーバーへ同期。
