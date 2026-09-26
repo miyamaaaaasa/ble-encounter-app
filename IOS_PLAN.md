@@ -47,6 +47,29 @@ A側には現れない（自分で検出済みのため二重にならない）�
 
 ---
 
+## 実機検証結果（2026-09-26）
+
+iPhone 15（iOS 27.0）＋ Pixel 5 ＋ A202SH で、**iOSを「見つける専門」として参加させる構成**を検証した。
+
+| 検証 | 結果 |
+|---|---|
+| iPhoneでの起動・画面表示・サーバー登録 | OK |
+| iPhoneの「スキャン中」表示 | OK（beta1.11.0+51 で修正後） |
+| **iPhone が Android(A202SH) を検出** | **OK** — サーバーに `Yuki <- iPhone15` を記録 |
+| **iPhone が Android(Pixel) を検出** | **OK** — `PixelA <- iPhone15` |
+| **Android側アプリが相互記録を取り込む** | **OK** — Pixelで `[Mutual] merged 2 encounters` |
+
+**Swiftを1行も書かずに、iPhone↔Androidのすれ違いが両者に成立した。**
+Android側はiPhoneの電波を一度も受けていない（iPhoneは電波を出していない）が、
+相互記録によって出会いが残る。
+
+まだ成立しないもの: **iPhone ↔ iPhone**（双方とも電波を出さないため）。
+これはSwiftでPeripheral（アドバタイズ）を実装すれば解決する。
+
+未確認: iPhoneをロックした状態（背面）での検出。
+
+---
+
 ## 残作業
 
 ### 1. アプリ側で相互記録を取り込む（済・実機確認は未）
