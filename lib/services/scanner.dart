@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../core/constants.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../core/peer_id.dart';
 import '../models/template_message.dart';
@@ -76,6 +77,12 @@ class BleScanner {
     }
 
     await FlutterBluePlus.startScan(
+      // iOSはバックグラウンドでスキャンを続けるにはサービスUUIDの指定が必須。
+      // Android側の広告にはサービスUUIDが入っているので、これで取りこぼさない。
+      // Androidは従来どおり無指定（挙動を変えない）。
+      withServices: defaultTargetPlatform == TargetPlatform.iOS
+          ? [Guid(Constants.serviceUuid)]
+          : const [],
       androidScanMode: AndroidScanMode.lowLatency,
       continuousUpdates: true,
     );

@@ -358,12 +358,22 @@ class AppNotifier extends Notifier<AppState> {
     final profile = state.ownProfile;
     if (profile == null) {
       state = state.copyWith(errorMessage: 'プロフィールを設定してください');
+      _starting = false; // 解放しないと以後 start() が永久に素通りになる
       return;
     }
     try {
-      final btState = await FlutterBluePlus.adapterState.first;
+      // iOSはCoreBluetoothの初期化直後 unknown を返すことがあるため、
+      // 確定した状態（unknown以外）が来るまで短時間待つ。
+      final btState = await FlutterBluePlus.adapterState
+          .where((s) => s != BluetoothAdapterState.unknown)
+          .first
+          .timeout(const Duration(seconds: 3),
+              onTimeout: () => BluetoothAdapterState.unknown);
       if (btState != BluetoothAdapterState.on) {
         debugPrint('[App] BT not ready ($btState), waiting...');
+        // ここで _starting を戻さないと、あとでBTをオンにしても
+        // start() が「起動中」とみなして何もしなくなる。
+        _starting = false;
         return;
       }
     } catch (_) {}
