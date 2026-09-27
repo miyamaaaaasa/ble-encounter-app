@@ -63,10 +63,25 @@ iPhone 15（iOS 27.0）＋ Pixel 5 ＋ A202SH で、**iOSを「見つける専�
 Android側はiPhoneの電波を一度も受けていない（iPhoneは電波を出していない）が、
 相互記録によって出会いが残る。
 
-まだ成立しないもの: **iPhone ↔ iPhone**（双方とも電波を出さないため）。
-これはSwiftでPeripheral（アドバタイズ）を実装すれば解決する。
+### 追加検証（beta1.12.0+52・iOS側アドバタイズ実装後）
 
-未確認: iPhoneをロックした状態（背面）での検出。
+iOSはサービスUUIDのみを流し、トークンはGATTのcharacteristicで渡す方式を実装
+（`ios/Runner/AppDelegate.swift` の `BleAdvertiserPlugin`、受信側は `scanner.dart` の
+`_readTokenViaGatt`）。iPhone 15（iOS 27.0）＋ iPad Pro 12.9 第2世代（iPadOS 17.7）＋ Pixel 5 で確認。
+
+| 経路 | 結果 | 証跡（サーバーの相互記録） |
+|---|---|---|
+| **iPhone → iPad** | **OK** | `iPad <- iPhone15` 9/26 21:17 |
+| **iPad → iPhone** | **OK** | `iPhone15 <- iPad` 9/26 21:20 |
+| **Android → iPhone（GATTで読む）** | **OK** | `iPhone15 <- PixelA` 9/26 16:45 |
+| **Android → iPad（GATTで読む）** | **OK** | `iPad <- PixelA`／Pixelログ `GATT token id=739c` |
+
+これで **iOS↔iOS、iOS↔Android の全組み合わせが画面オン時に成立**した。
+
+検証中の落とし穴: Macのターミナルで前の `flutter run` が動いたままだと、次の
+`flutter run -d <別端末>` が実行されない（`q` で終了してから実行する）。
+
+**未確認: 画面ロック中（背面）での検出。** iOSは背面でスキャン頻度を大きく絞るため、実用上の検出率は別途測る必要がある。
 
 ---
 
