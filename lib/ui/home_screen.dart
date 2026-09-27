@@ -77,6 +77,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (!appState.isRunning && appState.ownProfile != null) {
         ref.read(appProvider.notifier).start();
       }
+      // iOSのロック中にネイティブ側が拾ったすれ違いを回収して照合する
+      ref.read(appProvider.notifier).onResumed();
       // 復帰時に運営のお知らせを即取得する。定期ポーリング(2分)だけだと
       // 「配信 → 来場者がアプリを開く」の流れで最大2分待たせてしまう。
       ref.read(broadcastProvider.notifier).refresh();

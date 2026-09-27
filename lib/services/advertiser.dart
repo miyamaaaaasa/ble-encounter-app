@@ -42,4 +42,22 @@ class BleAdvertiser {
     if (!_supported) return;
     await _channel.invokeMethod<void>('stopForegroundService');
   }
+
+  /// iOSの画面ロック中にネイティブ側が拾ったトークンを回収する（取り出すと消える）。
+  /// Dartのサイクルはロック中に止まるため、その間の検出はここから受け取る。
+  Future<List<({String hex, DateTime at})>> drainBackgroundTokens() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return const [];
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>('drainBackgroundTokens');
+      return [
+        for (final e in raw ?? const [])
+          if (e is List && e.length >= 2 && e[0] is String && e[1] is num)
+            (hex: e[0] as String,
+             at: DateTime.fromMillisecondsSinceEpoch((e[1] as num).toInt())),
+      ];
+    } catch (e) {
+      debugPrint('[BleAdvertiser] drainBackgroundTokens: $e');
+      return const [];
+    }
+  }
 }

@@ -483,11 +483,29 @@ class AppNotifier extends Notifier<AppState> {
     }
   }
 
+  /// iOSで画面ロック中にネイティブ側が拾ったトークンを保留キューへ移す。
+  /// 検出時刻はネイティブが記録した時刻を使う（開門・気配演出の判定を崩さない）。
+  Future<void> _ingestBackgroundTokens() async {
+    final list = await _advertiser.drainBackgroundTokens();
+    if (list.isEmpty) return;
+    final own = TokenService.hexToken;
+    for (final t in list) {
+      if (t.hex == own) continue;
+      await PendingScanStorage.add(t.hex, t.at);
+    }
+    state = state.copyWith(hasNewEncounter: true);
+    debugPrint('[BgScan] ingested ${list.length} tokens captured while locked');
+  }
+
+  /// アプリ復帰時に呼ぶ。ロック中の検出分をすぐ照合して画面に反映する。
+  Future<void> onResumed() => _autoResolveNow();
+
   Future<void> _autoResolveNow() async {
     await _rescuePastDays();
     // 自分が誰も検出していなくても、相手が自分を検出している可能性がある。
     // 保留トークンの有無に関わらず取り込む（early returnより前に置く）。
     await _mergeMutualEncounters();
+    await _ingestBackgroundTokens();
     try {
       final pending = await PendingScanStorage.getAllTokens();
       if (pending.isEmpty) return;
