@@ -12,6 +12,8 @@ The vault is `H:\マイドライブ\obsirian`; the canonical app project is `pro
 python tool/obsidian_sync.py --session "<concise factual summary; omit credentials, tokens, private keys, and sensitive personal data>"
 ```
 
+The vault's Google Drive Sync plugin has `autoPush` enabled. It batches changes and pushes after roughly 60 seconds; this takes effect after the plugin reloads in Obsidian.
+
 Run a full sync even when there are no code changes. Before recording, check whether relevant source documents or notes are stale against the current repository and update them when evidence supports the correction. Keep unresolved claims explicitly marked unverified. `tool/obsidian_sync.py` mirrors the repo documents, index and Git history; it does not infer facts from chat or independently decide whether prose is accurate. Record factual conversation context in `sessions/YYYY-MM-DD.md`, and reusable requirements/decisions in the relevant source document.
 
 Do not overwrite hand-maintained Obsidian notes. Do not copy secrets into notes. Treat old `projects/アプリ開発/` copies as superseded; the canonical app docs live at `projects/ble-encounter-app/`.
