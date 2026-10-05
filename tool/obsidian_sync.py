@@ -49,6 +49,10 @@ DOCS = {
     "PLAY_RELEASE.md": "Google Play公開手順",
     "IOS_PLAN.md": "iOS版の開発計画",
     "server/README.md": "サーバー運用手順",
+    "ios_handoff/HANDOFF_PROMPT.md": "iOS開発引き継ぎプロンプト",
+    "ios_handoff/SOURCE_BUNDLE.md": "iOSソース引き継ぎ資料",
+    "store_assets/README.md": "ストア画像アセット手順",
+    "store_assets/store_listing.md": "ストア掲載文案",
 }
 
 
@@ -123,7 +127,7 @@ def sync_history():
 def sync_index(synced: list[str]):
     tests = sh("git ls-files test/*.dart").splitlines()
     tools = sh("git ls-files tool/*").splitlines()
-    loc = sh('git ls-files "lib/*.dart"').splitlines()
+    loc = sh('git ls-files "lib/*.dart" "lib/**/*.dart"').splitlines()
     body = [
         fm("BLE Encounter App", ["ble-encounter-app", "project", "moc"]),
         "# はじめましてこんにちは（BLE Encounter App）\n",
@@ -136,6 +140,7 @@ def sync_index(synced: list[str]):
         body.append(f"- [[{path.split('/')[-1]}|{label}]]")
     body += [
         "- [[history|バージョン履歴]]",
+        "- [[today-ui-mockups|Today UIモックと要件判断]]",
         "- [[sessions|作業ログ]]（sessions/ 配下）",
         "\n## 絶対維持事項（破壊禁止）\n",
         "- GPS不使用（BLEのみ）／BLE中心設計／匿名性",
@@ -203,6 +208,9 @@ def main() -> int:
         i = sys.argv.index("--session")
         if i + 1 < len(sys.argv):
             add_session(sys.argv[i + 1])
+        else:
+            print("NG: --session の後に記録内容が必要です")
+            return 2
     print(f"== done -> {DEST}")
     return 0
 

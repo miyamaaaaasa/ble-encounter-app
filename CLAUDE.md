@@ -17,13 +17,21 @@ GPS不使用 / BLE中心設計 / 匿名性 / 気配演出 / 開門システム�
 QA（`qa_smoke.sh`）→ commit（`git commit -F <file>`）→ push → ドキュメント更新
 
 ## セッション終了時に必ず行うこと
-1. REPORT.md を更新
-2. commit / push（意味のある改善単位ごと）
-3. **Obsidian同期を実行する**:
+1. 関連するソース資料・Obsidianノートの古い記述を現状と照合し、根拠のある範囲で更新する。未確認は未確認と書く
+2. REPORT.md を更新（コード・検証・設計上の判断があった場合）
+3. commit / push（意味のある改善単位ごと）
+4. **各プロジェクト関連のユーザー発言と応答を、その都度Obsidianへ即時記録してから応答を完了する**。コード変更がなくても実行:
    ```
-   python tool/obsidian_sync.py --session "<今回やったことの要約>"
+   python tool/obsidian_sync.py --session "<依頼・決定・応答の事実要約。秘密情報は含めない>"
    ```
    → vault (`ObsidianAI/projects/ble-encounter-app/`) に資料・履歴・作業ログが記録される
+
+`tool/obsidian_sync.py` はリポジトリ文書・Git履歴をミラーするだけで、会話内容や事実関係を自動推論しない。資料の現況確認・修正と、会話要約の記録を両方行う。旧 `projects/アプリ開発/` は重複アーカイブ。正本は `projects/ble-encounter-app/`。
+
+## UI作業の追加ルール
+- Todayを含め、既存7タブ・機能・操作・表示情報を独断で削除しない
+- Todayのスキャン状態、お知らせ、気配、出会いカルーセルとメタデータ、三つの開門・カウントダウン・開封、過去30日履歴を維持
+- 見た目のモックと実装仕様を区別し、省略・追加・変更を明記してから実装
 
 ## 参照ドキュメント
 - [PROMPT_GUIDE.md](PROMPT_GUIDE.md) — 有効なルール全集（UI/UX/BLE/Git/命名）
