@@ -41,14 +41,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   ];
 
   static const _dockItems = [
-    DockItem(asset: 'assets/icons/tab_today.png', label: '今日'),
-    DockItem(asset: 'assets/icons/tab_plaza.png', label: '広場'),
-    DockItem(asset: 'assets/icons/tab_game.png', label: 'ゲーム'),
-    DockItem(asset: 'assets/icons/tab_badge.png', label: 'バッジ'),
-    DockItem(asset: 'assets/icons/tab_kakera.png', label: 'カケラ'),
+    DockItem(asset: 'assets/icons/nav_today.png', label: '今日'),
+    DockItem(asset: 'assets/icons/nav_plaza.png', label: '広場'),
+    DockItem(asset: 'assets/icons/nav_game.png', label: 'ゲーム'),
+    DockItem(asset: 'assets/icons/nav_badge.png', label: 'バッジ'),
+    DockItem(asset: 'assets/icons/nav_kakera.png', label: 'カケラ'),
     // じぶんタブはユーザー作成ドット絵（未作成時はデフォルトドット絵）
     DockItem(custom: UserIcon(size: 26, radius: 7), label: 'じぶん'),
-    DockItem(asset: 'assets/icons/tab_settings.png', label: '設定'),
+    DockItem(asset: 'assets/icons/nav_settings.png', label: '設定'),
   ];
 
   @override

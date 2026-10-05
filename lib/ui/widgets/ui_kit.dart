@@ -223,18 +223,21 @@ class SpeechBubble extends StatelessWidget {
   final String text;
   final Color color;
   final double maxWidth;
+  final bool pixelated;
 
   const SpeechBubble({
     super.key,
     required this.text,
     this.color = Colors.white,
     this.maxWidth = 230,
+    this.pixelated = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _BubblePainter(color: color, ink: Palette.ink),
+      painter:
+          _BubblePainter(color: color, ink: Palette.ink, pixelated: pixelated),
       child: Container(
         constraints: BoxConstraints(maxWidth: maxWidth),
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
@@ -252,11 +255,55 @@ class SpeechBubble extends StatelessWidget {
 class _BubblePainter extends CustomPainter {
   final Color color;
   final Color ink;
-  _BubblePainter({required this.color, required this.ink});
+  final bool pixelated;
+  _BubblePainter(
+      {required this.color, required this.ink, required this.pixelated});
 
   @override
   void paint(Canvas canvas, Size size) {
     const tail = 8.0;
+    if (pixelated) {
+      final w = size.width, h = size.height - tail;
+      final path = Path()
+        ..addPolygon([
+          const Offset(8, 0),
+          Offset(w - 8, 0),
+          Offset(w - 8, 4),
+          Offset(w - 4, 4),
+          Offset(w - 4, 8),
+          Offset(w, 8),
+          Offset(w, h - 8),
+          Offset(w - 4, h - 8),
+          Offset(w - 4, h - 4),
+          Offset(w - 8, h - 4),
+          Offset(w - 8, h),
+          Offset(w / 2 + 8, h),
+          Offset(w / 2 + 8, h + 4),
+          Offset(w / 2 + 4, h + 4),
+          Offset(w / 2 + 4, h + tail),
+          Offset(w / 2 - 4, h + tail),
+          Offset(w / 2 - 4, h + 4),
+          Offset(w / 2 - 8, h + 4),
+          Offset(w / 2 - 8, h),
+          Offset(8, h),
+          Offset(8, h - 4),
+          Offset(4, h - 4),
+          Offset(4, h - 8),
+          Offset(0, h - 8),
+          const Offset(0, 8),
+          const Offset(4, 8),
+          const Offset(4, 4),
+          const Offset(8, 4),
+        ], true);
+      canvas.drawPath(path, Paint()..color = color);
+      canvas.drawPath(
+          path,
+          Paint()
+            ..color = ink.withValues(alpha: 0.7)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5);
+      return;
+    }
     final body = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, size.width, size.height - tail),
       const Radius.circular(16),
@@ -268,15 +315,14 @@ class _BubblePainter extends CustomPainter {
       ..lineTo(size.width / 2 + 8, size.height - tail)
       ..close();
 
-    canvas.drawPath(
-        path.shift(const Offset(0, 3)),
+    canvas.drawPath(path.shift(const Offset(0, 3)),
         Paint()..color = ink.withValues(alpha: 0.10));
     canvas.drawPath(path, Paint()..color = color);
   }
 
   @override
   bool shouldRepaint(covariant _BubblePainter old) =>
-      old.color != color;
+      old.color != color || old.ink != ink || old.pixelated != pixelated;
 }
 
 // ─── 統計チップ ──────────────────────────────────────────────────────────────
@@ -306,7 +352,9 @@ class StatChip extends StatelessWidget {
           const SizedBox(width: 5),
           Text(label,
               style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w700, color: Palette.ink)),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Palette.ink)),
         ],
       ),
     );
@@ -339,8 +387,8 @@ class SectionLabel extends StatelessWidget {
 
 // ─── ゲーム機ドック（NavigationBarの代替）───────────────────────────────────
 class DockItem {
-  final String? asset;   // 正式ピクセルアイコン（assets/icons/）
-  final Widget? custom;  // カスタムウィジェット（じぶんタブのドット絵など）
+  final String? asset; // 正式ピクセルアイコン（assets/icons/）
+  final Widget? custom; // カスタムウィジェット（じぶんタブのドット絵など）
   final String label;
   const DockItem({this.asset, this.custom, required this.label})
       : assert(asset != null || custom != null);
@@ -363,62 +411,63 @@ class GameDock extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        margin: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         decoration: BoxDecoration(
           color: Palette.card,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: Palette.liftBig(),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Palette.inkFaint.withValues(alpha: 0.22)),
         ),
         child: Row(
           children: List.generate(items.length, (i) {
             final sel = i == selected;
             return Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onSelect(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutBack,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  decoration: BoxDecoration(
-                    color: sel ? Palette.coral.withValues(alpha: 0.16) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      AnimatedScale(
-                        scale: sel ? 1.22 : 1.0,
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutBack,
-                        child: SizedBox(
-                          width: 26,
-                          height: 26,
-                          child: items[i].custom ??
-                              Image.asset(
-                                items[i].asset!,
-                                filterQuality: FilterQuality.medium,
-                                // 非選択時は少し沈んだ色味に
-                                color: sel
-                                    ? null
-                                    : Palette.inkSoft.withValues(alpha: 0.55),
-                                colorBlendMode:
-                                    sel ? null : BlendMode.srcATop,
-                              ),
+              child: Semantics(
+                button: true,
+                selected: sel,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onSelect(i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutBack,
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      border: Border(
+                          bottom: BorderSide(
+                              color: sel ? Palette.sky : Colors.transparent,
+                              width: 3)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedScale(
+                          scale: sel ? 1.08 : 1.0,
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOutBack,
+                          child: SizedBox(
+                            width: 30,
+                            height: 30,
+                            child: items[i].custom ??
+                                Image.asset(
+                                  items[i].asset!,
+                                  filterQuality: FilterQuality.medium,
+                                ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        items[i].label,
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: sel ? FontWeight.w800 : FontWeight.w500,
-                          color: sel ? Palette.coralDeep : Palette.inkSoft,
+                        const SizedBox(height: 2),
+                        Text(
+                          items[i].label,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: sel ? FontWeight.w800 : FontWeight.w500,
+                            color: sel ? Palette.ink : Palette.inkSoft,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -1,0 +1,10 @@
+Tool: built-in image_gen. Reference: today-light-dark-v2.png. Output: assets/today/plaza_light.png and plaza_dark.png.
+
+Common prompt:
+Create a production decorative background asset ONLY for the central residents plaza of a Japanese anonymous Bluetooth encounter game, matching the landscape visual language in the reference design board. Wide landscape composition roughly 2:1. Original handcrafted chunky pixel art, crisp squares, no antialiasing on pixel-art edges, quiet detailed woodland plaza, symmetric enough but natural. Small original arched stone gateway far back at top center, trees frame left and right, a few flowers and benches near edges, center and lower center largely open flat green ground so real user square avatars and Japanese text can be overlaid. Artwork extends to all four edges. NO text, letters, numbers, UI, borders, speech bubbles, buttons, avatars, creatures, people, smartphone, logo, watermark or emoji. This is scenery only, don't reproduce whole phone screenshot.
+
+Light suffix:
+LIGHT asset: pale warm cream sky, pastel mint trees, soft sage grass, cream walkway patches. Upper sky and lower center muted low-detail. Daytime welcoming, no oversized decorative objects.
+
+Dark suffix:
+DARK asset: deep indigo sky, dark teal trees and ground, restrained warm amber lanterns near edges, small crescent moon high toward right and sparse pixel stars. Low-detail center/lower center; no black, no oversaturated glow. Nighttime welcoming.
