@@ -8,7 +8,7 @@ git履歴・テスト状況を Obsidian vault に同期する。
   python tool/obsidian_sync.py             # 全体同期（docs + index + history）
   python tool/obsidian_sync.py --session "作業内容の要約"   # 作業ログも追加
 
-同期先: C:/Users/ifjvm/Documents/ObsidianAI/projects/ble-encounter-app/
+同期先: H:/マイドライブ/obsirian/projects/ble-encounter-app/
   index.md          … プロジェクト全体のハブ（現況・構成・リンク集）
   history.md        … バージョン履歴（git logから自動生成）
   docs/*.md         … リポジトリ内mdのミラー（frontmatter付与）
@@ -28,7 +28,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = Path(__file__).resolve().parent.parent
-VAULT = Path(r"C:\Users\ifjvm\Documents\ObsidianAI")
+VAULT = Path(r"H:\マイドライブ\obsirian")
 DEST = VAULT / "projects" / "ble-encounter-app"
 
 # リポジトリ内のドキュメント → vault内での表示名

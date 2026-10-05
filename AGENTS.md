@@ -6,7 +6,7 @@ This app is an anonymous BLE encounter community game, not a social network. Pre
 
 ## Obsidian is the live development journal
 
-The vault is `C:\Users\ifjvm\Documents\ObsidianAI`; the canonical app project is `projects/ble-encounter-app/`. For every project-related user turn, record the request, decisions, response and any changes in the session note immediately before finishing the response:
+The vault is `H:\マイドライブ\obsirian`; the canonical app project is `projects/ble-encounter-app/`. For every project-related user turn, record the request, decisions, response and any changes in the session note immediately before finishing the response:
 
 ```powershell
 python tool/obsidian_sync.py --session "<concise factual summary; omit credentials, tokens, private keys, and sensitive personal data>"

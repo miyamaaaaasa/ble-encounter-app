@@ -24,7 +24,7 @@ QA（`qa_smoke.sh`）→ commit（`git commit -F <file>`）→ push → ドキ�
    ```
    python tool/obsidian_sync.py --session "<依頼・決定・応答の事実要約。秘密情報は含めない>"
    ```
-   → vault (`ObsidianAI/projects/ble-encounter-app/`) に資料・履歴・作業ログが記録される
+   → vault (`H:\マイドライブ\obsirian\projects\ble-encounter-app/`) に資料・履歴・作業ログが記録される
 
 `tool/obsidian_sync.py` はリポジトリ文書・Git履歴をミラーするだけで、会話内容や事実関係を自動推論しない。資料の現況確認・修正と、会話要約の記録を両方行う。旧 `projects/アプリ開発/` は重複アーカイブ。正本は `projects/ble-encounter-app/`。
 
