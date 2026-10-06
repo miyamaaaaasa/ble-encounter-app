@@ -97,3 +97,6 @@ Bluetoothですれ違った人との出会いを楽しむコミュニティゲ�
 ---
 
 関連: [PROMPT_GUIDE.md](PROMPT_GUIDE.md) / [CLAUDE.md](CLAUDE.md)
+
+## 2026-10-06 最新UI仕様
+旧モックとタブ構成に優先する仕様は `design/world-ui/REQUIREMENTS.md`。実装・正式素材TODOは同フォルダのREADME.md。参照画像の切り抜きは使用しない。5タブで既存機能を画面内に保持する。

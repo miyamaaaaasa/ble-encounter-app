@@ -20,7 +20,7 @@ Do not overwrite hand-maintained Obsidian notes. Do not copy secrets into notes.
 
 ## UI work
 
-Use all seven existing tabs in their current order. A visual mockup is not an implementation specification: preserve all existing Today content and behavior (scan state, broadcasts, presence, encounter carousel and its metadata, gates/countdown/reveal, 30-day history and navigation). Explicitly label proposals that add, remove, or alter information or interactions. Keep original dot art and user-created icons meaningful in both themes.
+The explicit 2026-10-06 specification in `design/world-ui/REQUIREMENTS.md` supersedes the former seven-tab rule: use 今日 / 広場 / ゲーム / 図鑑 / じぶん. Keep バッジ / カケラ / 設定 reachable from these screens. Normal BLE has no scan label; only stopped BLE shows 停止中. Preserve broadcasts, delayed presence, hidden pending identities/counts, existing gate calculation/reveal calls, history and all underlying functions. User-provided concept art is reference only; do not crop it into app assets.
 
 ## Session completion
 

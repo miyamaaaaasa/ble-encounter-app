@@ -1,9 +1,9 @@
+import 'widgets/ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../core/ble_config.dart';
-import '../providers/ble_providers.dart'
-    show appProvider, scanIntervalProvider;
+import '../providers/ble_providers.dart' show appProvider, scanIntervalProvider;
 import '../providers/theme_provider.dart';
 import '../services/api_service.dart';
 import '../services/data_export_service.dart';
@@ -19,13 +19,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  bool   _encounterEnabled = true;
-  bool   _bannerEnabled    = true;
-  bool   _updateEnabled    = true;
-  bool   _eventEnabled     = true;
-  bool   _soundEnabled     = true;
-  bool   _vibrationEnabled = true;
-  String _version          = '';
+  bool _encounterEnabled = true;
+  bool _bannerEnabled = true;
+  bool _updateEnabled = true;
+  bool _eventEnabled = true;
+  bool _soundEnabled = true;
+  bool _vibrationEnabled = true;
+  String _version = '';
 
   @override
   void initState() {
@@ -48,12 +48,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _encounterEnabled = settings.encounterEnabled;
-      _bannerEnabled    = settings.bannerEnabled;
-      _updateEnabled    = settings.updateEnabled;
-      _eventEnabled     = settings.eventEnabled;
-      _soundEnabled     = settings.soundEnabled;
+      _bannerEnabled = settings.bannerEnabled;
+      _updateEnabled = settings.updateEnabled;
+      _eventEnabled = settings.eventEnabled;
+      _soundEnabled = settings.soundEnabled;
       _vibrationEnabled = settings.vibrationEnabled;
-      _version          = 'beta${info.version}';
+      _version = 'beta${info.version}';
     });
   }
 
@@ -128,9 +128,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final success = await ApiService.deleteAccount();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(success
-          ? 'サーバーのデータを削除しました'
-          : '削除できませんでした。通信状況を確認してもう一度お試しください'),
+      content:
+          Text(success ? 'サーバーのデータを削除しました' : '削除できませんでした。通信状況を確認してもう一度お試しください'),
       behavior: SnackBarBehavior.floating,
     ));
   }
@@ -140,10 +139,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final gameData = await GameStorage.load();
       await DataExportService.exportAll(
-        profile:    state.ownProfile,
+        profile: state.ownProfile,
         encounters: state.encounters,
-        badges:     state.badges,
-        gameData:   gameData,
+        badges: state.badges,
+        gameData: gameData,
       );
     } catch (e) {
       if (!mounted) return;
@@ -197,16 +196,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state     = ref.watch(appProvider);
-    final si        = ref.watch(scanIntervalProvider);
+    final state = ref.watch(appProvider);
+    final si = ref.watch(scanIntervalProvider);
     final themeMode = ref.watch(themeProvider);
 
     return CustomScrollView(
       slivers: [
-        const SliverAppBar.large(title: Text('設定')),
+        const SliverToBoxAdapter(
+            child: ScreenHeader(
+                title: '設定', asset: 'assets/icons/nav_settings.png')),
         SliverList(
           delegate: SliverChildListDelegate([
-
             // ─── 外観・ヘルプ ─────────────────────────────────────────────
             _SectionHeader('外観・ヘルプ'),
             ListTile(
@@ -222,13 +222,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 items: const [
                   DropdownMenuItem(
                       value: ThemeMode.light,
-                      child: Text('☀️ 昼', style: TextStyle(fontSize: 13))),
+                      child: Text('昼', style: TextStyle(fontSize: 13))),
                   DropdownMenuItem(
                       value: ThemeMode.dark,
-                      child: Text('🌙 夜', style: TextStyle(fontSize: 13))),
+                      child: Text('夜', style: TextStyle(fontSize: 13))),
                   DropdownMenuItem(
                       value: ThemeMode.system,
-                      child: Text('📱 自動', style: TextStyle(fontSize: 13))),
+                      child: Text('自動', style: TextStyle(fontSize: 13))),
                 ],
                 onChanged: (v) {
                   if (v != null) ref.read(themeProvider.notifier).set(v);
@@ -269,11 +269,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   : const Text('Bluetoothをオンにすると自動で復帰します'),
               trailing: state.isRunning
                   ? OutlinedButton(
-                      onPressed: () =>
-                          ref.read(appProvider.notifier).stop(),
+                      onPressed: () => ref.read(appProvider.notifier).stop(),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor:
-                            Theme.of(context).colorScheme.error,
+                        foregroundColor: Theme.of(context).colorScheme.error,
                         side: BorderSide(
                             color: Theme.of(context).colorScheme.error),
                       ),
@@ -303,8 +301,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('検出タイミング',
-                            style: TextStyle(fontSize: 15)),
+                        const Text('検出タイミング', style: TextStyle(fontSize: 15)),
                         Text(
                           '時計に同期 — 全デバイスが同じタイミングで通信',
                           style: TextStyle(
@@ -316,9 +313,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             '⚡ バッテリー消費が増加します',
                             style: TextStyle(
                                 fontSize: 11,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .error),
+                                color: Theme.of(context).colorScheme.error),
                           ),
                       ],
                     ),
@@ -334,9 +329,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         .toList(),
                     onChanged: (v) {
                       if (v == null) return;
-                      ref
-                          .read(appProvider.notifier)
-                          .setScanInterval(v);
+                      ref.read(appProvider.notifier).setScanInterval(v);
                     },
                   ),
                 ],
@@ -407,8 +400,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ListTile(
               leading: const Icon(Icons.upload_outlined),
               title: const Text('データをエクスポート'),
-              subtitle: const Text(
-                  'プロフィール・すれ違い記録・バッジ・ゲームデータをバックアップ'),
+              subtitle: const Text('プロフィール・すれ違い記録・バッジ・ゲームデータをバックアップ'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _onExport,
             ),
@@ -425,8 +417,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text('サーバーのデータを削除',
                   style: TextStyle(color: Colors.red)),
-              subtitle: const Text(
-                  '名前・アバター・ドット絵・自己紹介をサーバーから消します（取り消せません）'),
+              subtitle: const Text('名前・アバター・ドット絵・自己紹介をサーバーから消します（取り消せません）'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _onDeleteServerData,
             ),
@@ -438,14 +429,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const ListTile(
               leading: Icon(Icons.shield_outlined),
               title: Text('データの扱い'),
-              subtitle: Text(
-                  'GPS 不使用・BLE のみ・データはデバイス内にのみ保存'),
+              subtitle: Text('GPS 不使用・BLE のみ・データはデバイス内にのみ保存'),
             ),
             const ListTile(
               leading: Icon(Icons.lock_outline),
               title: Text('リアルタイム検知の秘匿'),
-              subtitle: Text(
-                  '個人特定を防ぐため、すれ違いデータは結果演出完了後にのみ公開されます'),
+              subtitle: Text('個人特定を防ぐため、すれ違いデータは結果演出完了後にのみ公開されます'),
             ),
 
             const Divider(indent: 16, endIndent: 16),
@@ -458,8 +447,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               trailing: Text(
                 _version,
                 style: TextStyle(
-                    color: Theme.of(context).colorScheme.outline,
-                    fontSize: 13),
+                    color: Theme.of(context).colorScheme.outline, fontSize: 13),
               ),
             ),
 

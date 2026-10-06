@@ -14,18 +14,56 @@ final _asciiFormatter =
     FilteringTextInputFormatter.allow(RegExp(r'[\x20-\x7E]'));
 
 const _prefectureNames = [
-  '北海道', '青森', '岩手', '宮城', '秋田', '山形', '福島',
-  '茨城', '栃木', '群馬', '埼玉', '千葉', '東京', '神奈川',
-  '新潟', '富山', '石川', '福井', '山梨', '長野',
-  '岐阜', '静岡', '愛知', '三重',
-  '滋賀', '京都', '大阪', '兵庫', '奈良', '和歌山',
-  '鳥取', '島根', '岡山', '広島', '山口',
-  '徳島', '香川', '愛媛', '高知',
-  '福岡', '佐賀', '長崎', '熊本', '大分', '宮崎', '鹿児島', '沖縄',
+  '北海道',
+  '青森',
+  '岩手',
+  '宮城',
+  '秋田',
+  '山形',
+  '福島',
+  '茨城',
+  '栃木',
+  '群馬',
+  '埼玉',
+  '千葉',
+  '東京',
+  '神奈川',
+  '新潟',
+  '富山',
+  '石川',
+  '福井',
+  '山梨',
+  '長野',
+  '岐阜',
+  '静岡',
+  '愛知',
+  '三重',
+  '滋賀',
+  '京都',
+  '大阪',
+  '兵庫',
+  '奈良',
+  '和歌山',
+  '鳥取',
+  '島根',
+  '岡山',
+  '広島',
+  '山口',
+  '徳島',
+  '香川',
+  '愛媛',
+  '高知',
+  '福岡',
+  '佐賀',
+  '長崎',
+  '熊本',
+  '大分',
+  '宮崎',
+  '鹿児島',
+  '沖縄',
 ];
 
-String _stripNonAscii(String s) =>
-    s.replaceAll(RegExp(r'[^\x20-\x7E]'), '');
+String _stripNonAscii(String s) => s.replaceAll(RegExp(r'[^\x20-\x7E]'), '');
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final bool isFirstLaunch;
@@ -128,14 +166,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: Palette.lift(),
               ),
-              child: DotAvatarView(
-                  avatar: _dotAvatar!, sizePx: 88, radius: 16),
+              child: DotAvatarView(avatar: _dotAvatar!, sizePx: 88, radius: 16),
             )
           else
             CircleAvatar(
               radius: 48,
-              backgroundColor:
-                  Palette.pastelAvatars[_colorIndex % Palette.pastelAvatars.length],
+              backgroundColor: Palette
+                  .pastelAvatars[_colorIndex % Palette.pastelAvatars.length],
               child: Text(initial,
                   style: const TextStyle(
                       fontSize: 40,
@@ -159,22 +196,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     // hobbyDetail のアイテム（カテゴリ変更時に連動）
-    final catIdx     = _template.hobbyCategory.clamp(0, TemplateMessage.hobbyDetails.length - 1);
+    final catIdx = _template.hobbyCategory
+        .clamp(0, TemplateMessage.hobbyDetails.length - 1);
     final detailItems = TemplateMessage.hobbyDetails[catIdx];
-    final safeDetail  = _template.hobbyDetail == -1
+    final safeDetail = _template.hobbyDetail == -1
         ? -1
         : _template.hobbyDetail.clamp(0, detailItems.length - 1);
 
     final body = CustomScrollView(
       slivers: [
-        if (!widget.isFirstLaunch)
-          const SliverAppBar.large(title: Text('プロフィール'))
-        else
-          const SliverAppBar(
-            title: Text('Profile Setup'),
-            automaticallyImplyLeading: false,
-            pinned: true,
-          ),
+        SliverToBoxAdapter(
+            child: ScreenHeader(
+                title: widget.isFirstLaunch ? 'はじめまして' : 'プロフィール',
+                asset: 'assets/icons/nav_today.png')),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 40),
           sliver: SliverList(
@@ -200,8 +234,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 20),
 
               // ─── 定型文設定 ──────────────────────────────────────
-              Text('ひとこと設定',
-                  style: Theme.of(context).textTheme.labelLarge),
+              Text('ひとこと設定', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 12),
 
               // 状態
@@ -214,15 +247,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 items: [
                   const DropdownMenuItem(value: -1, child: Text('未回答')),
-                  ...TemplateMessage.statusList
-                      .asMap()
-                      .entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key, child: Text(e.value))),
+                  ...TemplateMessage.statusList.asMap().entries.map((e) =>
+                      DropdownMenuItem(value: e.key, child: Text(e.value))),
                 ],
                 onChanged: (v) {
                   if (v == null) return;
-                  setState(() => _template = _template.copyWith(statusIndex: v));
+                  setState(
+                      () => _template = _template.copyWith(statusIndex: v));
                 },
               ),
               const SizedBox(height: 12),
@@ -237,17 +268,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 items: [
                   const DropdownMenuItem(value: -1, child: Text('未回答')),
-                  ...TemplateMessage.hobbyCategories
-                      .asMap()
-                      .entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key, child: Text(e.value))),
+                  ...TemplateMessage.hobbyCategories.asMap().entries.map((e) =>
+                      DropdownMenuItem(value: e.key, child: Text(e.value))),
                 ],
                 onChanged: (v) {
                   if (v == null) return;
                   setState(() => _template = _template.copyWith(
-                      hobbyCategory: v,
-                      hobbyDetail: v == -1 ? -1 : 0));
+                      hobbyCategory: v, hobbyDetail: v == -1 ? -1 : 0));
                 },
               ),
               const SizedBox(height: 12),
@@ -264,15 +291,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                   items: [
                     const DropdownMenuItem(value: -1, child: Text('未回答')),
-                    ...detailItems
-                        .asMap()
-                        .entries
-                        .map((e) => DropdownMenuItem(
-                            value: e.key, child: Text(e.value))),
+                    ...detailItems.asMap().entries.map((e) =>
+                        DropdownMenuItem(value: e.key, child: Text(e.value))),
                   ],
                   onChanged: (v) {
                     if (v == null) return;
-                    setState(() => _template = _template.copyWith(hobbyDetail: v));
+                    setState(
+                        () => _template = _template.copyWith(hobbyDetail: v));
                   },
                 ),
               if (_template.hobbyCategory != -1) const SizedBox(height: 12),
@@ -307,15 +332,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 items: [
                   const DropdownMenuItem(value: -1, child: Text('未回答')),
-                  ...TemplateMessage.phraseList
-                      .asMap()
-                      .entries
-                      .map((e) => DropdownMenuItem(
-                          value: e.key, child: Text(e.value))),
+                  ...TemplateMessage.phraseList.asMap().entries.map((e) =>
+                      DropdownMenuItem(value: e.key, child: Text(e.value))),
                 ],
                 onChanged: (v) {
                   if (v == null) return;
-                  setState(() => _template = _template.copyWith(phraseIndex: v));
+                  setState(
+                      () => _template = _template.copyWith(phraseIndex: v));
                 },
               ),
               const SizedBox(height: 12),
@@ -325,9 +348,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -368,16 +389,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         color: avatarColors[i],
                         border: selected
                             ? Border.all(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface,
+                                color: Theme.of(context).colorScheme.onSurface,
                                 width: 3)
                             : null,
                         boxShadow: selected
                             ? [
                                 BoxShadow(
-                                    color:
-                                        avatarColors[i].withOpacity(0.5),
+                                    color: avatarColors[i].withOpacity(0.5),
                                     blurRadius: 8)
                               ]
                             : null,
@@ -398,18 +416,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 Row(
                   children: [
                     Icon(Icons.calendar_today_outlined,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.outline),
+                        size: 16, color: Theme.of(context).colorScheme.outline),
                     const SizedBox(width: 8),
                     Text('登録日',
                         style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.outline)),
+                            color: Theme.of(context).colorScheme.outline)),
                     const Spacer(),
                     Text(
                       fmtDate(registeredAt),
-                      style:
-                          const TextStyle(fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -417,11 +432,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 36),
               FilledButton.icon(
                 onPressed: _save,
-                icon: Icon(widget.isFirstLaunch
-                    ? Icons.arrow_forward
-                    : Icons.check),
-                label:
-                    Text(widget.isFirstLaunch ? 'はじめる' : '保存'),
+                icon: Icon(
+                    widget.isFirstLaunch ? Icons.arrow_forward : Icons.check),
+                label: Text(widget.isFirstLaunch ? 'はじめる' : '保存'),
                 style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(52)),
               ),
@@ -429,8 +442,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 const SizedBox(height: 12),
                 Text(
                   'Your name and template message are shared with nearby people.\nEnglish name only. Anonymous OK.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Theme.of(context).colorScheme.outline),
                   textAlign: TextAlign.center,
                 ),
               ],

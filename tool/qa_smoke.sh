@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tool/qa_smoke.sh — 無人スモークQA
-# インストール → 起動 → 7タブを比率座標で巡回スクショ → クラッシュ/エラー検出
+# インストール → 起動 → 5タブを比率座標で巡回スクショ → クラッシュ/エラー検出
 # 使い方: bash tool/qa_smoke.sh [serial]
 # 成果物: qa_out/<serial>/tab_*.png, errors.txt / 終了コード 0=合格 1=要修正
 set -u
@@ -13,7 +13,7 @@ SERIAL="${1:-$(adb devices | awk 'NR>1 && $2=="device"{print $1; exit}')}"
 A() { timeout 20 adb -s "$SERIAL" "$@"; }
 alive() { [ "$(timeout 5 adb -s "$SERIAL" get-state 2>/dev/null | tr -d '\r')" = "device" ]; }
 APK="build/app/outputs/flutter-apk/app-release.apk"
-OUT="qa_out/$SERIAL"
+OUT="qa_out/${QA_OUT_NAME:-$SERIAL}"
 mkdir -p "$OUT"
 echo "== QA smoke on $SERIAL =="
 
@@ -40,13 +40,13 @@ A shell am force-stop jp.hajimemashite.app
 A shell am start -n jp.hajimemashite.app/.MainActivity >/dev/null
 sleep 6
 
-# 3) 解像度から比率座標を計算（GameDock: 下端マージン内の7等分）
+# 3) 解像度から比率座標を計算（GameDock: 下端マージン内の5等分）
 SIZE=$(A shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1)
 W=${SIZE%x*}; H=${SIZE#*x}
 DOCK_Y=$(( H * 90 / 100 ))
-TABS=(today plaza game badge kakera self settings)
+TABS=(today plaza game catalog self)
 for i in "${!TABS[@]}"; do
-  X=$(( W * (2*i + 1) / 14 ))   # (i+0.5)/7 * W
+  X=$(( W * (2*i + 1) / 10 ))   # (i+0.5)/5 * W
   alive || { echo "NG: device lost mid-run"; exit 1; }
   A shell input tap "$X" "$DOCK_Y"
   sleep 2

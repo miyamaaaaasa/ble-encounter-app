@@ -7,14 +7,8 @@ import 'widgets/ui_kit.dart';
 import 'widgets/user_icon.dart';
 import 'today_screen.dart';
 import 'plaza_screen.dart';
-import 'minigame_screen.dart';
-import 'coming_soon_screen.dart';
 import '../providers/broadcast_provider.dart';
-import '../core/ble_config.dart';
-import 'badge_screen.dart';
-import 'profile_screen.dart';
-import 'settings_screen.dart';
-import 'puzzle/puzzle_board_screen.dart';
+import 'community_tabs.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -30,25 +24,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   static const _screens = <Widget>[
     TodayScreen(),
     PlazaScreen(),
-    kGameTabEnabled
-        ? MinigameScreen()
-        : ComingSoonScreen(
-            title: 'ゲームセンター', asset: 'assets/icons/tab_game.png'),
-    BadgeScreen(),
-    PuzzleBoardScreen(),
-    ProfileScreen(),
-    SettingsScreen(),
+    GameCollectionScreen(),
+    CatalogScreen(),
+    SelfOverviewScreen(),
   ];
-
   static const _dockItems = [
     DockItem(asset: 'assets/icons/nav_today.png', label: '今日'),
     DockItem(asset: 'assets/icons/nav_plaza.png', label: '広場'),
     DockItem(asset: 'assets/icons/nav_game.png', label: 'ゲーム'),
-    DockItem(asset: 'assets/icons/nav_badge.png', label: 'バッジ'),
-    DockItem(asset: 'assets/icons/nav_kakera.png', label: 'カケラ'),
-    // じぶんタブはユーザー作成ドット絵（未作成時はデフォルトドット絵）
-    DockItem(custom: UserIcon(size: 26, radius: 7), label: 'じぶん'),
-    DockItem(asset: 'assets/icons/nav_settings.png', label: '設定'),
+    DockItem(custom: Icon(Icons.menu_book_outlined, size: 26), label: '図鑑'),
+    DockItem(custom: UserIcon(size: 26, radius: 4), label: 'じぶん'),
   ];
 
   @override
@@ -90,7 +75,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (next.isEmpty || !mounted) return;
       for (final badge in next) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${badge.emoji} バッジ獲得: ${badge.title}'),
+          content: Text('バッジ獲得: ${badge.title}'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
         ));

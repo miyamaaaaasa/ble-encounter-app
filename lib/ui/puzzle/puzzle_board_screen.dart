@@ -34,20 +34,21 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
     final newPieces = await ref.read(puzzleProvider.notifier).resolvePending(
       onProfileResolved: (profile) {
         ref.read(appProvider.notifier).upsertFromServerProfile(
-          peerId: profile.userId,
-          name: profile.displayName,
-          colorIndex: profile.colorIndex,
-          metAt: profile.metAt,
-        );
+              peerId: profile.userId,
+              name: profile.displayName,
+              colorIndex: profile.colorIndex,
+              metAt: profile.metAt,
+            );
       },
     );
     if (newPieces.isNotEmpty) {
       // 自動取得分は静かに公開済みにする（演出は電波解析ボタンで）
-      await ref.read(puzzleProvider.notifier)
+      await ref
+          .read(puzzleProvider.notifier)
           .markRevealed(newPieces.map((p) => p.ownerId));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('✨ ${newPieces.length}枚のカケラが届きました'),
+          content: Text('${newPieces.length}枚のカケラが届きました'),
           duration: const Duration(seconds: 2),
         ));
       }
@@ -73,8 +74,9 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
               child: Row(
                 children: [
-                  Image.asset('assets/icons/tab_kakera.png',
-                      width: 30, height: 30,
+                  Image.asset('assets/icons/nav_kakera.png',
+                      width: 30,
+                      height: 30,
                       filterQuality: FilterQuality.medium),
                   const SizedBox(width: 8),
                   const Expanded(
@@ -128,8 +130,8 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
                                 height: 1.0)),
                         const SizedBox(width: 4),
                         const Text('枚 あつめた',
-                            style: TextStyle(
-                                fontSize: 13, color: Colors.white70)),
+                            style:
+                                TextStyle(fontSize: 13, color: Colors.white70)),
                         const Spacer(),
                         Text('つぎの目標 $nextGoal枚',
                             style: const TextStyle(
@@ -273,7 +275,7 @@ class _NightIconButton extends StatelessWidget {
 // ─── グリッドセル ─────────────────────────────────────────────────────────────
 
 class _PieceCell extends StatelessWidget {
-  final PuzzlePiece  piece;
+  final PuzzlePiece piece;
   final VoidCallback onTap;
 
   const _PieceCell({required this.piece, required this.onTap});
@@ -293,7 +295,11 @@ class _PieceCell extends StatelessWidget {
                 : Colors.white10,
           ),
           boxShadow: revealed
-              ? [BoxShadow(color: const Color(0xFF00AAFF).withValues(alpha: 0.15), blurRadius: 8)]
+              ? [
+                  BoxShadow(
+                      color: const Color(0xFF00AAFF).withValues(alpha: 0.15),
+                      blurRadius: 8)
+                ]
               : null,
         ),
         child: ClipRRect(
@@ -303,19 +309,23 @@ class _PieceCell extends StatelessWidget {
             children: [
               if (!revealed)
                 const Center(
-                    child: Icon(Icons.lock_outline, color: Colors.white24, size: 28))
+                    child: Icon(Icons.lock_outline,
+                        color: Colors.white24, size: 28))
               else
                 PieceThumbnailWidget(piece: piece.piece, size: double.infinity),
               if (revealed)
                 Positioned(
-                  bottom: 0, left: 0, right: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 3),
                     color: Colors.black45,
                     child: Text(
                       piece.ownerName,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white70, fontSize: 9),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 9),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -342,16 +352,20 @@ class _PieceDetail extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
-                  color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 20),
           if (piece.isRevealed) ...[
             PieceThumbnailWidget(piece: piece.piece, size: 128),
             const SizedBox(height: 16),
             Text(piece.ownerName,
                 style: const TextStyle(
-                    color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Text('${piece.meetCount}回すれ違い',
                 style: const TextStyle(color: Color(0xFF00AAFF), fontSize: 13)),

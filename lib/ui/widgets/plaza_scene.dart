@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/encounter_record.dart';
 import '../theme/palette.dart';
 import 'peer_icon.dart';
+import 'pixel_world.dart';
 import 'ui_kit.dart';
 import 'user_icon.dart';
 
@@ -119,116 +120,118 @@ class _PlazaSceneState extends State<PlazaScene>
       children: [
         // ─── 広場シーン ───────────────────────────────────────
         ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            height: 230,
+            height: 400,
             width: double.infinity,
-            child: Stack(
-              children: [
-                // 背景（レベルで発展）
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _PlazaBgPainter(
-                        level: level.level, night: Palette.night),
-                  ),
-                ),
-
-                // 住民たち（後列4人・前列4人）
-                ...List.generate(shown.length, (i) {
-                  final backRow = i >= 4;
-                  final col = i % 4;
-                  final seed = shown[i].peerId.hashCode;
-                  final jitter = (seed % 17) / 17.0 * 0.08 - 0.04;
-                  final xFrac =
-                      0.13 + col * 0.24 + (backRow ? 0.10 : 0) + jitter;
-                  final bottom = backRow ? 92.0 : 40.0;
-                  final size = backRow ? 40.0 : 52.0;
-                  // 向き変更: seedで左右どちらを向くか（ゆらぎで時々反転）
-                  final faceLeft = seed % 2 == 0;
-
-                  return AnimatedBuilder(
-                    animation: _bob,
-                    builder: (_, child) {
-                      final dy =
-                          sin(_bob.value * 2 * pi + i * 0.9) * 2.2;
-                      return Positioned(
-                        left: xFrac * (MediaQuery.of(context).size.width - 40),
-                        bottom: bottom - dy,
-                        child: child!,
-                      );
-                    },
-                    child: AnimatedOpacity(
-                      // 新規住民はふわっと現れる
-                      opacity: _fadingIn.contains(shown[i].peerId) ? 0.15 : 1.0,
-                      duration: const Duration(milliseconds: 800),
-                      curve: Curves.easeOut,
-                      child: _Resident(
-                        encounter: shown[i],
-                        size: size,
-                        faceLeft: faceLeft,
-                        talking: i == _talkerIdx,
-                        onTap: () => widget.onTapResident(shown[i]),
-                      ),
-                    ),
-                  );
-                }),
-
-                // じぶん（中央手前）
-                AnimatedBuilder(
-                  animation: _bob,
-                  builder: (_, child) {
-                    final dy = sin(_bob.value * 2 * pi) * 2.0;
-                    return Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 14 - dy,
-                      child: child!,
-                    );
-                  },
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const UserIcon(size: 44, radius: 12),
-                      const SizedBox(height: 2),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(8),
+            child: LayoutBuilder(
+                builder: (context, constraints) => Stack(
+                      children: [
+                        // 背景（レベルで発展）
+                        Positioned.fill(
+                          child: PixelWorld(
+                              richness: level.level,
+                              child: const SizedBox.expand()),
                         ),
-                        child: const Text('じぶん',
-                            style: TextStyle(
-                                fontSize: 9,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700)),
-                      ),
-                    ],
-                  ),
-                ),
 
-                // レベル名（左上）
-                Positioned(
-                  top: 10,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      'Lv.${level.level} ${level.name}',
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+                        // 住民たち（後列4人・前列4人）
+                        ...List.generate(shown.length, (i) {
+                          final backRow = i >= 4;
+                          final col = i % 4;
+                          final seed = shown[i].peerId.hashCode;
+                          final jitter = (seed % 17) / 17.0 * 0.08 - 0.04;
+                          final xFrac = (col / 3 + jitter).clamp(0.0, 1.0);
+                          final bottom = backRow ? 180.0 : 100.0;
+                          final size = backRow ? 48.0 : 60.0;
+                          // 向き変更: seedで左右どちらを向くか（ゆらぎで時々反転）
+                          final faceLeft = seed % 2 == 0;
+
+                          return AnimatedBuilder(
+                            animation: _bob,
+                            builder: (_, child) {
+                              final dy =
+                                  sin(_bob.value * 2 * pi + i * 0.9) * 2.2;
+                              return Positioned(
+                                left:
+                                    xFrac * max(0, constraints.maxWidth - 110),
+                                bottom: bottom - dy,
+                                child: child!,
+                              );
+                            },
+                            child: AnimatedOpacity(
+                              // 新規住民はふわっと現れる
+                              opacity: _fadingIn.contains(shown[i].peerId)
+                                  ? 0.15
+                                  : 1.0,
+                              duration: const Duration(milliseconds: 800),
+                              curve: Curves.easeOut,
+                              child: _Resident(
+                                encounter: shown[i],
+                                size: size,
+                                faceLeft: faceLeft,
+                                talking: i == _talkerIdx,
+                                onTap: () => widget.onTapResident(shown[i]),
+                              ),
+                            ),
+                          );
+                        }),
+
+                        // じぶん（中央手前）
+                        AnimatedBuilder(
+                          animation: _bob,
+                          builder: (_, child) {
+                            final dy = sin(_bob.value * 2 * pi) * 2.0;
+                            return Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 14 - dy,
+                              child: child!,
+                            );
+                          },
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const UserIcon(size: 44, radius: 12),
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text('じぶん',
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // レベル名（左上）
+                        Positioned(
+                          top: 10,
+                          left: 12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Text(
+                              'Lv.${level.level} ${level.name}',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )),
           ),
         ),
         const SizedBox(height: 8),
@@ -243,7 +246,7 @@ class _PlazaSceneState extends State<PlazaScene>
             ],
           )
         else
-          Text('🎆 広場は最高レベルです！', style: Ts.caption),
+          Text('広場は最高レベルです！', style: Ts.caption),
       ],
     );
   }
@@ -267,201 +270,75 @@ class _Resident extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        Palette.pastelAvatars[encounter.colorIndex % Palette.pastelAvatars.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // おしゃべり吹き出し
-          AnimatedOpacity(
-            opacity: talking ? 1 : 0,
-            duration: const Duration(milliseconds: 250),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 3),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              constraints: const BoxConstraints(maxWidth: 110),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.15),
-                      offset: const Offset(0, 2)),
-                ],
+    return Semantics(
+        button: true,
+        label: encounter.name,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // おしゃべり吹き出し
+              AnimatedOpacity(
+                opacity: talking ? 1 : 0,
+                duration: const Duration(milliseconds: 250),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  constraints: const BoxConstraints(maxWidth: 110),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          offset: const Offset(0, 2)),
+                    ],
+                  ),
+                  child: Text(
+                    encounter.template.phraseText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF4A3C31)),
+                  ),
+                ),
               ),
-              child: Text(
-                encounter.template.phraseText,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF4A3C31)),
+              // 体: ドット絵住民（白枠の角丸ドット絵。向きはPeerIcon側で安全に反転）
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(size * 0.28),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: PeerIcon(
+                  encounter: encounter,
+                  size: size - 4,
+                  circle: false,
+                  radius: size * 0.22,
+                  flipX: faceLeft,
+                ),
               ),
-            ),
+              // 足元の影
+              Container(
+                margin: const EdgeInsets.only(top: 2),
+                width: size * 0.55,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ],
           ),
-          // 体: ドット絵住民（白枠の角丸ドット絵。向きはPeerIcon側で安全に反転）
-          Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(size * 0.28),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    offset: const Offset(0, 2)),
-              ],
-            ),
-            child: PeerIcon(
-              encounter: encounter,
-              size: size - 4,
-              circle: false,
-              radius: size * 0.22,
-              flipX: faceLeft,
-            ),
-          ),
-          // 足元の影
-          Container(
-            margin: const EdgeInsets.only(top: 2),
-            width: size * 0.55,
-            height: 5,
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-        ],
-      ),
-    );
+        ));
   }
-}
-
-// ─── 広場背景（レベルで発展）──────────────────────────────────────────────────
-class _PlazaBgPainter extends CustomPainter {
-  final int level;
-  final bool night;
-  _PlazaBgPainter({required this.level, required this.night});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // 空
-    final skyColors = night
-        ? [const Color(0xFF232B52), const Color(0xFF171B2E)]
-        : switch (level) {
-            <= 2 => [const Color(0xFFBFE3F5), const Color(0xFFE8F4E4)],
-            <= 4 => [const Color(0xFFA9DBF2), const Color(0xFFDFF2D8)],
-            _ => [const Color(0xFFFFD9A0), const Color(0xFFFFEFD5)], // 祭りの夕焼け
-          };
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..shader = LinearGradient(
-                colors: skyColors,
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter)
-            .createShader(Offset.zero & size),
-    );
-
-    // 地面
-    final groundY = size.height * 0.55;
-    canvas.drawRect(
-      Rect.fromLTWH(0, groundY, size.width, size.height - groundY),
-      Paint()
-        ..color =
-            night ? const Color(0xFF2A3352) : const Color(0xFFA8D08A),
-    );
-    // 地面の道
-    canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(size.width / 2, size.height * 0.85),
-          width: size.width * 0.7,
-          height: size.height * 0.35),
-      Paint()
-        ..color =
-            night ? const Color(0xFF3A4368) : const Color(0xFFE8D5A8),
-    );
-
-    final deco = Paint();
-    // 木（Lv2+で増える）
-    final trees = (level - 1).clamp(0, 4);
-    for (int i = 0; i < trees; i++) {
-      final x = size.width * (0.08 + i * 0.28);
-      deco.color = night ? const Color(0xFF1E2540) : const Color(0xFF6B9B4E);
-      canvas.drawCircle(Offset(x, groundY - 14), 16, deco);
-      deco.color = night ? const Color(0xFF161A30) : const Color(0xFF8B5E3C);
-      canvas.drawRect(Rect.fromLTWH(x - 2.5, groundY - 6, 5, 12), deco);
-    }
-    // 花（Lv3+）
-    if (level >= 3) {
-      final rng = Random(7);
-      deco.color = night ? const Color(0xFF8FA3E8) : const Color(0xFFF9A8C0);
-      for (int i = 0; i < level * 3; i++) {
-        canvas.drawCircle(
-            Offset(rng.nextDouble() * size.width,
-                groundY + 8 + rng.nextDouble() * (size.height - groundY - 16)),
-            2.4,
-            deco);
-      }
-    }
-    // ベンチ（Lv4+）
-    if (level >= 4) {
-      deco.color = night ? const Color(0xFF4A3A2A) : const Color(0xFF9B6B43);
-      canvas.drawRRect(
-          RRect.fromRectAndRadius(
-              Rect.fromLTWH(size.width * 0.78, groundY + 6, 40, 8),
-              const Radius.circular(2)),
-          deco);
-      canvas.drawRect(
-          Rect.fromLTWH(size.width * 0.78 + 4, groundY + 14, 4, 8), deco);
-      canvas.drawRect(
-          Rect.fromLTWH(size.width * 0.78 + 32, groundY + 14, 4, 8), deco);
-    }
-    // 提灯（Lv6 お祭り or 夜）
-    if (level >= 6 || night) {
-      final lanternColors = [
-        const Color(0xFFFF8A70),
-        const Color(0xFFFFC85C),
-        const Color(0xFF5FC9B5),
-        const Color(0xFFB89FE3),
-      ];
-      final ropeP = Paint()
-        ..color = Colors.black.withValues(alpha: 0.25)
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke;
-      final path = Path()..moveTo(0, 18);
-      path.quadraticBezierTo(size.width / 2, 44, size.width, 14);
-      canvas.drawPath(path, ropeP);
-      for (int i = 0; i < 6; i++) {
-        final t = 0.08 + i * 0.17;
-        final x = size.width * t;
-        final y = 18 + (44 - 18) * 4 * t * (1 - t) + 6;
-        deco.color = lanternColors[i % lanternColors.length];
-        canvas.drawOval(
-            Rect.fromCenter(center: Offset(x, y), width: 10, height: 13),
-            deco);
-      }
-    }
-    // 星（夜のみ）
-    if (night) {
-      final rng = Random(3);
-      deco.color = Colors.white.withValues(alpha: 0.8);
-      for (int i = 0; i < 18; i++) {
-        canvas.drawCircle(
-            Offset(rng.nextDouble() * size.width,
-                rng.nextDouble() * groundY * 0.8),
-            rng.nextDouble() * 1.3 + 0.4,
-            deco);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _PlazaBgPainter old) =>
-      old.level != level || old.night != night;
 }

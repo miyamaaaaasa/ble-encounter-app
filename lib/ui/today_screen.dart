@@ -4,812 +4,428 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/ble_config.dart';
 import '../models/encounter_record.dart';
-import '../providers/ble_providers.dart'
-    show appProvider, AppState, AppNotifier, scanIntervalProvider;
+import '../providers/ble_providers.dart';
 import '../providers/broadcast_provider.dart';
 import 'encounter_helpers.dart';
+import 'encounter_detail_sheet.dart';
+import 'gate_reveal_screen.dart';
 import 'theme/palette.dart';
 import 'widgets/peer_icon.dart';
+import 'widgets/pixel_world.dart';
 import 'widgets/ui_kit.dart';
 
-/// 今日タブ = アプリの顔。
-/// 「人が集まっている楽しさ」を円弧カルーセルで表現する。
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
-
   @override
   ConsumerState<TodayScreen> createState() => _TodayScreenState();
 }
 
-class _TodayScreenState extends ConsumerState<TodayScreen> {
-  Timer? _clockTimer;
-  Timer? _bannerTimer;
+class _TodayScreenState extends ConsumerState<TodayScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  Timer? _clockTimer, _bannerTimer;
   bool _showBanner = false;
-  final _rng = Random();
+  double _scroll = 0;
+  final _opened = <DateTime>{};
+  // ponytail: session-only playback receipts; persist UI receipts separately
+  // if suppressing replay across process/theme reconstruction is required.
+  final _celebrated = <String>{};
+  late final AnimationController _celebration;
+  int _celebrationCount = 0;
 
   @override
   void initState() {
     super.initState();
-    // パフォーマンス: 秒毎の全画面rebuildをやめ、30秒毎の状態同期のみ行う。
-    // 秒針カウントダウンは _CountdownText が自前で更新し、
-    // 開門瞬間は onDone コールバックで即時反映する。
+    WidgetsBinding.instance.addObserver(this);
+    _celebration =
+        AnimationController(vsync: this, duration: const Duration(seconds: 3));
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _celebrateOnOpen());
+  }
+
+  void _celebrateOnOpen() {
+    if (!mounted) return;
+    final now = DateTime.now();
+    final list = ref
+        .read(appProvider)
+        .encounters
+        .where((e) =>
+            e.isRevealed &&
+            AppNotifier.gatesToShow(now)
+                .contains(AppNotifier.gateTimeFor(e.lastMet)))
+        .toList();
+    if (list.isNotEmpty) {
+      _opened.addAll(AppNotifier.gatesToShow(now).where((g) =>
+          !now.isBefore(g) &&
+          !ref.read(appProvider).encounters.any((e) =>
+              !e.isRevealed && AppNotifier.gateTimeFor(e.lastMet) == g)));
+    }
+    final fresh = list
+        .where((e) =>
+            !_celebrated.contains('${e.peerId}:${e.lastMet.toIso8601String()}'))
+        .toList();
+    if (fresh.isEmpty) return;
+    _celebrated
+        .addAll(fresh.map((e) => '${e.peerId}:${e.lastMet.toIso8601String()}'));
+    setState(() => _celebrationCount = list.length);
+    if (!MediaQuery.disableAnimationsOf(context)) _celebration.forward(from: 0);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _celebrateOnOpen();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _clockTimer?.cancel();
     _bannerTimer?.cancel();
+    _celebration.dispose();
     super.dispose();
   }
 
-  static DateTime _gateFor(DateTime t) => AppNotifier.gateTimeFor(t);
-
-  /// 画面に並べる開門の一覧（判定は AppNotifier.gatesToShow に集約）。
-  List<DateTime> _todayGates() => AppNotifier.gatesToShow(DateTime.now());
-
-  List<EncounterRecord> _forGate(List<EncounterRecord> enc, DateTime gate) =>
-      enc.where((e) => _gateFor(e.lastMet) == gate).toList();
-
-  void _onEncounterDetected() {
-    if (_bannerTimer != null) return;
-    final delay = Duration(minutes: _rng.nextInt(21) + 10);
-    _bannerTimer = Timer(delay, () {
-      if (mounted) setState(() => _showBanner = true);
-    });
-  }
-
-  void _onGateRevealed() {
-    _bannerTimer?.cancel();
-    _bannerTimer = null;
-    setState(() => _showBanner = false);
-    ref.read(appProvider.notifier).revealToday();
-  }
-
-  String _gateLabel(DateTime gate) {
-    final now = DateTime.now();
-    final isTomorrow =
-        gate.year != now.year || gate.month != now.month || gate.day != now.day;
-    final base = gate.hour == 9
-        ? '朝'
-        : gate.hour == 12
-            ? '昼'
-            : gate.hour == 21
-                ? '夜'
-                : '${gate.hour}:00';
-    return isTomorrow ? 'あしたの$base' : base;
-  }
-
-  String _gateAsset(int hour) {
-    if (hour == 9) return 'assets/gate/gate_morning.png';
-    if (hour == 12) return 'assets/gate/gate_noon.png';
-    return 'assets/gate/gate_night.png';
+  Future<void> _open(DateTime gate, List<EncounterRecord> people) async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => GateRevealScreen(
+                encounters: people,
+                date: DateTime.now(),
+                onReveal: () async {
+                  await ref.read(appProvider.notifier).revealToday();
+                  if (!mounted) return;
+                  _bannerTimer?.cancel();
+                  _bannerTimer = null;
+                  setState(() {
+                    _showBanner = false;
+                    _opened.addAll(AppNotifier.gatesToShow(DateTime.now())
+                        .where((g) => !DateTime.now().isBefore(g)));
+                  });
+                  _celebrated.addAll(people.map(
+                      (e) => '${e.peerId}:${e.lastMet.toIso8601String()}'));
+                })));
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appProvider);
     final broadcast = ref.watch(broadcastProvider);
-
     ref.listen<AppState>(appProvider, (prev, next) {
-      if (next.hasNewEncounter && !(prev?.hasNewEncounter ?? false)) {
-        _onEncounterDetected();
+      if (next.hasNewEncounter &&
+          !(prev?.hasNewEncounter ?? false) &&
+          _bannerTimer == null) {
+        _bannerTimer = Timer(Duration(minutes: 10 + Random().nextInt(21)), () {
+          if (mounted) setState(() => _showBanner = true);
+        });
+      }
+      if ((prev?.isLoading ?? true) && !next.isLoading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _celebrateOnOpen());
       }
     });
-
-    final gates = _todayGates();
     final now = DateTime.now();
-    final si = ref.watch(scanIntervalProvider);
-
-    final todayRevealed = state.encounters
-        .where(
-            (e) => e.isRevealed && gates.any((g) => _gateFor(e.lastMet) == g))
+    final gates = AppNotifier.gatesToShow(now);
+    final today = state.encounters
+        .where((e) =>
+            e.isRevealed && gates.contains(AppNotifier.gateTimeFor(e.lastMet)))
         .toList()
       ..sort((a, b) => b.lastMet.compareTo(a.lastMet));
-
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final cutoff30 = todayStart.subtract(const Duration(days: 30));
-    final recentHistory = state.encounters
+    final available = gates
+        .where((g) =>
+            (kGateAlwaysOpen || !now.isBefore(g)) &&
+            (!_opened.contains(g) ||
+                state.encounters.any((e) =>
+                    !e.isRevealed && AppNotifier.gateTimeFor(e.lastMet) == g)))
+        .toList();
+    // UI chooses the oldest pending gate first; provider's gate calculation and
+    // revealToday remain the source of truth, including tomorrow's 09:00 gate.
+    final pendingGates = available
+        .where((g) => state.encounters.any(
+            (e) => !e.isRevealed && AppNotifier.gateTimeFor(e.lastMet) == g))
+        .toList();
+    final gate = pendingGates.isNotEmpty
+        ? pendingGates.first
+        : available.isNotEmpty
+            ? available.last
+            : gates.firstWhere((g) => now.isBefore(g),
+                orElse: () => DateTime(now.year, now.month, now.day + 1, 9));
+    final canOpen = kGateAlwaysOpen || !now.isBefore(gate);
+    final pending = state.encounters
+        .where((e) =>
+            (e.isRevealed &&
+                gates.contains(AppNotifier.gateTimeFor(e.lastMet))) ||
+            (!e.isRevealed &&
+                (kGateAlwaysOpen ||
+                    !now.isBefore(AppNotifier.gateTimeFor(e.lastMet)))))
+        .toList();
+    final start = DateTime(now.year, now.month, now.day);
+    final history = state.encounters
         .where((e) =>
             e.isRevealed &&
-            e.lastMet.isBefore(todayStart) &&
-            e.lastMet.isAfter(cutoff30))
+            e.lastMet.isBefore(start) &&
+            e.lastMet.isAfter(start.subtract(const Duration(days: 30))))
         .toList()
       ..sort((a, b) => b.lastMet.compareTo(a.lastMet));
+    String two(int n) => n.toString().padLeft(2, '0');
+    final tomorrow =
+        gate.day != now.day || gate.month != now.month || gate.year != now.year;
+    final gateLabel =
+        '${tomorrow ? 'あしたの' : ''}${gate.hour == 9 ? '朝' : gate.hour == 12 ? '昼' : '夜'}の開門';
 
-    return Container(
-      color: Palette.cream,
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(
-              title: 'きょうの広場',
-              asset: 'assets/icons/nav_today.png',
-              trailing: _ScanBadge(running: state.isRunning, si: si),
-            ),
-          ),
-
-          // ─── 運営からのお知らせ（文化祭モード）─────────────────
-          if (broadcast.banner != null)
+    return NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (n.depth == 0) setState(() => _scroll = n.metrics.pixels);
+          return false;
+        },
+        child: Stack(children: [
+          Positioned.fill(
+              child: PixelWorld(
+                  offset: _scroll,
+                  strength: 1,
+                  child: const SizedBox.expand())),
+          CustomScrollView(slivers: [
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-                child: _TodayPanel(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.campaign_outlined,
-                          size: 24, color: Palette.inkSoft),
-                      const SizedBox(width: 10),
-                      Expanded(
+                child: ColoredBox(
+                    color: Palette.cream.withValues(alpha: .94),
+                    child: ScreenHeader(
+                        title: 'きょうの広場',
+                        asset: 'assets/icons/nav_today.png',
+                        trailing: state.isRunning
+                            ? null
+                            : PixelPanel(
+                                padding: const EdgeInsets.all(8),
+                                child: Text('停止中', style: Ts.caption))))),
+            if (broadcast.banner != null)
+              SliverToBoxAdapter(
+                  child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: PixelPanel(
+                          child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            Expanded(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  Text(broadcast.banner!.title,
+                                      style: Ts.title),
+                                  Text(broadcast.banner!.body, style: Ts.body)
+                                ])),
+                            IconButton(
+                                tooltip: 'お知らせを閉じる',
+                                icon: Icon(Icons.close, color: Palette.ink),
+                                onPressed: () => ref
+                                    .read(broadcastProvider.notifier)
+                                    .dismissBanner()),
+                          ])))),
+            if (_showBanner)
+              SliverToBoxAdapter(
+                  child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: PixelPanel(
+                          child: Row(children: [
+                        Icon(Icons.people_outline, color: Palette.ink),
+                        const SizedBox(width: 12),
+                        Expanded(
+                            child: Text('だれかの気配が届いているよ\n次の開門で会えるよ',
+                                style: Ts.body))
+                      ])))),
+            SliverToBoxAdapter(
+                child: Padding(
+                    padding: const EdgeInsets.fromLTRB(36, 40, 36, 24),
+                    child: Column(children: [
+                      const PixelDoor(),
+                      const SizedBox(height: 24),
+                      PixelPanel(
+                          child: Column(children: [
+                        Text(gateLabel, style: Ts.caption),
+                        Text('${two(gate.hour)}:00',
+                            style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                color: Palette.ink)),
+                        if (!canOpen)
+                          _GateCountdown(
+                              gate: gate,
+                              onDone: () {
+                                if (mounted) setState(() {});
+                              })
+                      ])),
+                      if (canOpen) ...[
+                        const SizedBox(height: 12),
+                        WorldButton(
+                            label: '門をあける', onTap: () => _open(gate, pending))
+                      ],
+                    ]))),
+            SliverToBoxAdapter(
+                child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: PixelPanel(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(broadcast.banner!.title,
-                                style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: Palette.ink)),
-                            const SizedBox(height: 3),
-                            Text(broadcast.banner!.body,
-                                style: TextStyle(
-                                    fontSize: 12.5,
-                                    height: 1.4,
-                                    color: Palette.ink)),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text('きょうの出会い', style: Ts.title),
+                          const SizedBox(height: 12),
+                          if (today.isEmpty) ...[
+                            Row(
+                                children: List.generate(
+                                    4,
+                                    (_) => Expanded(
+                                        child: Padding(
+                                            padding: const EdgeInsets.all(4),
+                                            child: AspectRatio(
+                                                aspectRatio: 1,
+                                                child: ColoredBox(
+                                                    color: Palette.cream,
+                                                    child: Center(
+                                                        child: Text('?',
+                                                            style: TextStyle(
+                                                                fontSize: 28,
+                                                                color: Palette
+                                                                    .inkSoft))))))))),
+                            const SizedBox(height: 8),
+                            Text('門がひらくと、きょうすれ違った\nみんなに会えるよ！',
+                                style: Ts.caption),
+                          ] else ...[
+                            Text('${today.length}人 と出会いました！',
+                                style: Ts.heading),
+                            const SizedBox(height: 16),
+                            SpeechBubble(
+                                color: Palette.card,
+                                text: today.first.template.phraseText,
+                                pixelated: true),
+                            const SizedBox(height: 16),
+                            Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: today
+                                    .map((e) => Semantics(
+                                        button: true,
+                                        label: e.name,
+                                        child: GestureDetector(
+                                            onTap: () =>
+                                                EncounterDetailSheet.show(
+                                                    context, e),
+                                            child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  PeerIcon(
+                                                      encounter: e,
+                                                      size: today.length == 1
+                                                          ? 104
+                                                          : 64,
+                                                      circle: false,
+                                                      radius: 4),
+                                                  SizedBox(
+                                                      width: 80,
+                                                      child: Text(e.name,
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          style: Ts.caption)),
+                                                ]))))
+                                    .toList()),
+                            const SizedBox(height: 16),
+                            WorldButton(
+                                label: 'みんなを見る',
+                                secondary: true,
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => EncounterPeopleScreen(
+                                            people: today)))),
+                            const SizedBox(height: 12),
+                            WorldButton(
+                                label: '結果を見る・シェア',
+                                secondary: true,
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => GateRevealScreen(
+                                            encounters: today,
+                                            date: now,
+                                            resultOnly: true,
+                                            onReveal: () async {})))),
                           ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: () => ref
-                            .read(broadcastProvider.notifier)
-                            .dismissBanner(),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Icon(Icons.close,
-                              size: 18, color: Palette.inkSoft),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          // ─── すれ違いバナー ───────────────────────────────────
-          if (_showBanner)
+                        ])))),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-                child: _TodayPanel(
-                  color: Palette.sun.withValues(alpha: 0.25),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Icon(Icons.people_outline, size: 24, color: Palette.ink),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '誰かとすれ違えています！\n次の開門時刻に確認できます',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Palette.ink),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          // ─── 円弧カルーセル（今日出会った人たち）──────────────
-          SliverToBoxAdapter(
-            child: _MeetingPlaza(
-              people: todayRevealed,
-              isRunning: state.isRunning,
-            ),
-          ),
-
-          // ─── 開門ゲート ───────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-              child: Column(
-                children: [
-                  Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text('きょうの開門', style: Ts.title))),
-                  ...gates.map((gate) {
-                    final enc = _forGate(state.encounters, gate);
-                    final isOpen = kGateAlwaysOpen || now.isAfter(gate);
-                    final unrev = enc.where((e) => !e.isRevealed).toList();
-                    final revCount = enc.where((e) => e.isRevealed).length;
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _GatePanel(
-                        asset: _gateAsset(gate.hour),
-                        label: _gateLabel(gate),
-                        hour: gate.hour,
-                        isOpen: isOpen,
-                        gateTime: gate,
-                        onGateOpen: () {
-                          if (mounted) setState(() {});
-                        },
-                        revCount: revCount,
-                        unrevCount: unrev.length,
-                        onReveal: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => _SwipeCardScreen(
-                                encounters: unrev,
-                                onReveal: _onGateRevealed,
-                              ),
-                              fullscreenDialog: true,
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-
-          // ─── 過去30日の履歴 ────────────────────────────────────
-          if (recentHistory.isNotEmpty) ...[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('さいきんの出会い', style: Ts.title)),
-                    Text('${recentHistory.length}人', style: Ts.caption),
-                  ],
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              sliver: SliverList.builder(
-                itemCount: recentHistory.length,
-                itemBuilder: (ctx, i) =>
-                    _HistoryTile(encounter: recentHistory[i]),
-              ),
-            ),
-          ],
-
-          const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-        ],
-      ),
-    );
-  }
-}
-
-/// あいまいな出会い時間帯ラベル（正確な時刻・場所は出さない）
-String _fuzzyMetLabel(DateTime t) {
-  final diff = DateTime.now().difference(t);
-  if (diff.inMinutes < 60) return 'さっき すれ違ったよ';
-  final h = t.hour;
-  if (h >= 5 && h < 10) return 'あさ すれ違ったよ';
-  if (h >= 10 && h < 16) return 'ひるま すれ違ったよ';
-  if (h >= 16 && h < 19) return 'ゆうがた すれ違ったよ';
-  return 'よる すれ違ったよ';
-}
-
-// ─── スキャン状態バッジ ──────────────────────────────────────────────────────
-class _ScanBadge extends StatelessWidget {
-  final bool running;
-  final ScanInterval si;
-  const _ScanBadge({required this.running, required this.si});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color:
-            running ? Palette.teal.withValues(alpha: 0.18) : Palette.creamDeep,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-            color: Palette.teal.withValues(alpha: running ? 0.35 : 0.0)),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(running ? Icons.bluetooth_searching : Icons.pause,
-            size: 16, color: Palette.ink),
-        const SizedBox(width: 5),
-        Text(running ? 'スキャン中' : 'おやすみ中',
-            style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w700, color: Palette.ink)),
-      ]),
-    );
-  }
-}
-
-/// Todayだけの薄い面。共通パネルや他の画面の見た目には波及させない。
-class _TodayPanel extends StatelessWidget {
-  final Widget child;
-  final Color? color;
-  final EdgeInsets padding;
-  const _TodayPanel(
-      {required this.child,
-      this.color,
-      this.padding = const EdgeInsets.all(16)});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: color ?? Palette.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Palette.inkFaint.withValues(alpha: 0.22)),
-        ),
-        child: child,
-      );
-}
-
-class _PlazaBackdrop extends StatelessWidget {
-  final Widget child;
-  const _PlazaBackdrop({required this.child});
-
-  @override
-  Widget build(BuildContext context) => Stack(children: [
-        Positioned.fill(
-            child: RepaintBoundary(
-                child: IgnorePointer(
-          child: Image.asset(
-          Palette.night ? 'assets/today/plaza_dark.png' : 'assets/today/plaza_light.png',
-              fit: BoxFit.cover,
-              excludeFromSemantics: true),
-        ))),
-        Positioned.fill(
-            child: IgnorePointer(
-                child: DecoratedBox(
-          decoration: BoxDecoration(
-              gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Palette.cream.withValues(alpha: 0.9),
-              Palette.cream.withValues(alpha: 0.05),
-              Palette.cream.withValues(alpha: 0.95)
+                child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: PixelPanel(
+                        child: Wrap(
+                            spacing: 20,
+                            runSpacing: 8,
+                            children: gates
+                                .map((g) => Text(
+                                    '${g.hour == 9 ? '朝' : g.hour == 12 ? '昼' : '夜'} ${two(g.hour)}:00',
+                                    style: Ts.caption))
+                                .toList())))),
+            if (history.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                  child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: PixelPanel(
+                          child: Text('さいきんの出会い', style: Ts.title)))),
+              SliverList.builder(
+                  itemCount: history.length,
+                  itemBuilder: (_, i) => Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: GestureDetector(
+                          onTap: () =>
+                              EncounterDetailSheet.show(context, history[i]),
+                          child: PixelPanel(
+                              child: Row(children: [
+                            PeerIcon(
+                                encounter: history[i], size: 40, circle: false),
+                            const SizedBox(width: 12),
+                            Expanded(
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  Text(history[i].name, style: Ts.title),
+                                  Text(
+                                      '${fmtDate(history[i].lastMet)} · ${encounterLabel(history[i].meetCount)}',
+                                      style: Ts.caption)
+                                ])),
+                          ]))))),
             ],
-            stops: const [0, 0.45, 1],
-          )),
-        ))),
-        SizedBox(width: double.infinity, child: child),
-      ]);
-}
-
-// ─── 出会いの広場（円弧カルーセル）────────────────────────────────────────────
-class _MeetingPlaza extends StatefulWidget {
-  final List<EncounterRecord> people;
-  final bool isRunning;
-  const _MeetingPlaza({required this.people, required this.isRunning});
-
-  @override
-  State<_MeetingPlaza> createState() => _MeetingPlazaState();
-}
-
-class _MeetingPlazaState extends State<_MeetingPlaza>
-    with SingleTickerProviderStateMixin {
-  late final PageController _ctrl;
-  late final AnimationController _bob; // ぷるぷる待機アニメ
-  double _page = 0;
-  bool _celebrate = false; // 新しい出会いの祝福演出
-  bool _warmup = true; // 起動直後のストレージ復元を「新しい出会い」と誤認しない
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = PageController(viewportFraction: 0.36)
-      ..addListener(() {
-        if (mounted) setState(() => _page = _ctrl.page ?? 0);
-      });
-    _bob = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1800))
-      ..repeat();
-    Future.delayed(const Duration(seconds: 4), () {
-      if (mounted) _warmup = false;
-    });
-  }
-
-  @override
-  void didUpdateWidget(_MeetingPlaza old) {
-    super.didUpdateWidget(old);
-    // 新規ユーザー出現 → 祝福演出（2.5秒）。起動直後の復元ロードでは出さない
-    if (!_warmup && widget.people.length > old.people.length) {
-      setState(() => _celebrate = true);
-      Future.delayed(const Duration(milliseconds: 2500), () {
-        if (mounted) setState(() => _celebrate = false);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _bob.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final people = widget.people;
-
-    if (people.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-        child: _PlazaBackdrop(
-          child: _TodayPanel(
-            color: Palette.card.withValues(alpha: 0.85),
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-            child: Column(
-              children: [
-                Image.asset('assets/icons/nav_plaza.png',
-                    width: 52, height: 52),
-                const SizedBox(height: 12),
-                Text(
-                  widget.isRunning ? 'だれか来ないかな…' : 'スキャンはおやすみ中',
-                  style: Ts.title,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  widget.isRunning
-                      ? '外に出て誰かとすれ違うと、ここに集まってくるよ'
-                      : '設定からスキャンを再開できます',
-                  style: Ts.caption,
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final centerIdx = _page.round().clamp(0, people.length - 1);
-    final center = people[centerIdx];
-    final phrase = center.template.phraseText;
-
-    return _PlazaBackdrop(
-        child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Column(
-              children: [
-                const SizedBox(height: 4),
-                // 人数（出会いの祝福トーン）
-                Text('きょうは ${people.length}人 と出会えたよ',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: Palette.ink)),
-                const SizedBox(height: 10),
-
-                // 吹き出し（中央の人のひとこと）
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: SpeechBubble(
-                    key: ValueKey(centerIdx),
-                    text: '"$phrase"',
-                    color: Palette.card,
-                    pixelated: true,
-                    maxWidth: 280,
-                  ),
-                ),
-                const SizedBox(height: 2),
-
-                // 円弧カルーセル（祝福演出をスタック）
-                SizedBox(
-                  height: 196,
-                  child: Stack(
-                    children: [
-                      PageView.builder(
-                        controller: _ctrl,
-                        itemCount: people.length,
-                        itemBuilder: (ctx, i) {
-                          final delta = (i - _page);
-                          final dist = delta.abs();
-                          // 中央が大きく、離れるほど小さく＆下に沈む（円弧）
-                          final scale = (1.0 - dist * 0.28).clamp(0.55, 1.0);
-                          final dy = pow(dist, 1.5) * 34.0;
-                          final opacity = (1.0 - dist * 0.20).clamp(0.55, 1.0);
-
-                          return AnimatedBuilder(
-                            animation: _bob,
-                            builder: (_, child) {
-                              // ぷるぷる待機: 各人が少しずつ違う位相でゆれる
-                              final bobDy =
-                                  sin(_bob.value * 2 * pi + i * 1.3) * 2.5;
-                              return Transform.translate(
-                                offset: Offset(0, dy + bobDy),
-                                child: child,
-                              );
-                            },
-                            child: Transform.scale(
-                              scale: scale,
-                              child: Opacity(
-                                opacity: opacity,
-                                child: _PlazaPerson(
-                                  encounter: people[i],
-                                  isCenter: i == centerIdx,
-                                  onTap: () {
-                                    if (i == centerIdx) return;
-                                    _ctrl.animateToPage(i,
-                                        duration:
-                                            const Duration(milliseconds: 350),
-                                        curve: Curves.easeOutCubic);
-                                  },
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      // ─── 新しい出会いの祝福 ─────────────────────────
-                      IgnorePointer(
-                        child: AnimatedOpacity(
-                          opacity: _celebrate ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: Center(
-                            child: AnimatedScale(
-                              scale: _celebrate ? 1.0 : 0.6,
-                              duration: const Duration(milliseconds: 400),
-                              curve: Curves.elasticOut,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: Palette.sun,
-                                  borderRadius: BorderRadius.circular(24),
-                                  boxShadow: Palette.liftBig(Palette.sunDeep),
-                                ),
-                                child: Text(
-                                  'あたらしい出会い！',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      color: Palette.ink),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // 中央の人の名前
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Column(
-                    key: ValueKey('name$centerIdx'),
-                    children: [
-                      Text(center.name,
-                          style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: Palette.ink)),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${center.template.statusText} · ${encounterLabel(center.meetCount)}',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Palette.ink,
-                            fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 2),
-                      // プライバシー配慮: 正確な時刻は出さず、あいまいな時間帯だけ伝える
-                      Text(_fuzzyMetLabel(center.lastMet),
-                          style: TextStyle(fontSize: 11, color: Palette.ink)),
-                    ],
-                  ),
-                ),
-              ],
-            )));
+            const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
+          ]),
+          Positioned.fill(
+              child: IgnorePointer(
+                  child: AnimatedBuilder(
+                      animation: _celebration,
+                      builder: (context, child) => CustomPaint(
+                          painter: Celebration(
+                              _celebrationCount, _celebration.value))))),
+        ]));
   }
 }
 
-class _PlazaPerson extends StatelessWidget {
-  final EncounterRecord encounter;
-  final bool isCenter;
-  final VoidCallback onTap;
-  const _PlazaPerson({
-    required this.encounter,
-    required this.isCenter,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Palette
-        .pastelAvatars[encounter.colorIndex % Palette.pastelAvatars.length];
-
-    return LayoutBuilder(builder: (context, constraints) {
-      final artSize = min(120.0, max(40.0, constraints.maxWidth - 12));
-      return GestureDetector(
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // ドット絵を主役に: 相手の作品を大きく・にじませず表示
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Palette.card,
-                borderRadius: BorderRadius.circular(6),
-                border:
-                    Border.all(color: color.withValues(alpha: 0.55), width: 2),
-                boxShadow: [
-                  BoxShadow(
-                      color: Palette.ink.withValues(alpha: 0.12),
-                      offset: const Offset(0, 3))
-                ],
-              ),
-              child: PeerIcon(
-                encounter: encounter,
-                size: artSize,
-                circle: false,
-                radius: 2,
-              ),
-            ),
-            // 足元の影（地面に立っている感）
-            Container(
-              margin: const EdgeInsets.only(top: 6),
-              width: 44,
-              height: 8,
-              decoration: BoxDecoration(
-                color: Palette.ink.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-}
-
-// ─── 開門ゲートパネル ────────────────────────────────────────────────────────
-class _GatePanel extends StatelessWidget {
-  final String asset;
-  final String label;
-  final int hour;
-  final bool isOpen;
-  final DateTime gateTime;
-  final VoidCallback onGateOpen;
-  final int revCount;
-  final int unrevCount;
-  final VoidCallback onReveal;
-
-  const _GatePanel({
-    required this.asset,
-    required this.label,
-    required this.hour,
-    required this.isOpen,
-    required this.gateTime,
-    required this.onGateOpen,
-    required this.revCount,
-    required this.unrevCount,
-    required this.onReveal,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hh = hour.toString().padLeft(2, '0');
-    final hasUnrev = unrevCount > 0;
-
-    final action = isOpen
-        ? (hasUnrev
-            ? Semantics(
-                button: true,
-                child: GestureDetector(
-                  onTap: onReveal,
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                        color: Palette.coralDeep,
-                        borderRadius: BorderRadius.circular(18)),
-                    child: Text('$unrevCount人 あける！',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14)),
-                  ),
-                ))
-            : Text(revCount > 0 ? '$revCount人 確認済み' : '出会いなし',
-                textAlign: TextAlign.end,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: revCount > 0 ? Palette.tealDeep : Palette.inkSoft)))
-        : Wrap(
-            alignment: WrapAlignment.end,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 6,
-            children: [
-                Icon(Icons.hourglass_empty, size: 15, color: Palette.inkSoft),
-                _CountdownText(target: gateTime, onDone: onGateOpen),
-              ]);
-    final heading = Row(children: [
-      ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child:
-              Image.asset(asset, width: 48, height: 48, fit: BoxFit.contain)),
-      const SizedBox(width: 12),
-      Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('$labelの開門',
-            style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w800, color: Palette.ink)),
-        Text('$hh:00', style: Ts.caption),
-      ])),
-    ]);
-    return _TodayPanel(
-      color: isOpen && hasUnrev
-          ? Palette.coral.withValues(alpha: 0.13)
-          : Palette.card,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: LayoutBuilder(builder: (context, constraints) {
-        if (constraints.maxWidth < 290 ||
-            MediaQuery.textScalerOf(context).scale(14) > 18) {
-          return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                heading,
-                const SizedBox(height: 12),
-                Align(alignment: Alignment.centerRight, child: action),
-              ]);
-        }
-        return Row(children: [
-          Expanded(child: heading),
-          const SizedBox(width: 10),
-          Flexible(child: action),
-        ]);
-      }),
-    );
-  }
-}
-
-/// カウントダウン専用Widget。
-/// 自前の1秒タイマーでこのTextだけを更新し、画面全体のrebuildを避ける。
-/// 0になったら onDone で親に通知して開門状態へ切り替える。
-class _CountdownText extends StatefulWidget {
-  final DateTime target;
+class _GateCountdown extends StatefulWidget {
+  final DateTime gate;
   final VoidCallback onDone;
-  const _CountdownText({required this.target, required this.onDone});
-
+  const _GateCountdown({required this.gate, required this.onDone});
   @override
-  State<_CountdownText> createState() => _CountdownTextState();
+  State<_GateCountdown> createState() => _GateCountdownState();
 }
 
-class _CountdownTextState extends State<_CountdownText> {
-  Timer? _timer;
-
+class _GateCountdownState extends State<_GateCountdown> {
+  late final Timer _timer;
+  bool _notified = false;
   @override
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      if (DateTime.now().isAfter(widget.target)) {
-        _timer?.cancel();
-        widget.onDone(); // 開門の瞬間だけ親をrebuild
+      if (!DateTime.now().isBefore(widget.gate) && !_notified) {
+        _notified = true;
+        widget.onDone();
       } else {
         setState(() {});
       }
@@ -817,441 +433,23 @@ class _CountdownTextState extends State<_CountdownText> {
   }
 
   @override
+  void didUpdateWidget(_GateCountdown old) {
+    super.didUpdateWidget(old);
+    if (old.gate != widget.gate) _notified = false;
+  }
+
+  @override
   void dispose() {
-    _timer?.cancel();
+    _timer.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final remaining = widget.target.difference(DateTime.now());
-    final r = remaining.isNegative ? Duration.zero : remaining;
-    final rh = r.inHours.toString().padLeft(2, '0');
-    final rm = (r.inMinutes % 60).toString().padLeft(2, '0');
-    final rs = (r.inSeconds % 60).toString().padLeft(2, '0');
-    return Text('$rh:$rm:$rs',
-        style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Palette.inkSoft,
-            fontFeatures: const [FontFeature.tabularFigures()]));
+    final seconds = max(0, widget.gate.difference(DateTime.now()).inSeconds);
+    String two(int n) => n.toString().padLeft(2, '0');
+    return Text(
+        'あと ${two(seconds ~/ 3600)}:${two(seconds ~/ 60 % 60)}:${two(seconds % 60)}',
+        style: Ts.body);
   }
-}
-
-// ─── 履歴タイル ──────────────────────────────────────────────────────────────
-class _HistoryTile extends StatelessWidget {
-  final EncounterRecord encounter;
-  const _HistoryTile({required this.encounter});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: _TodayPanel(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          children: [
-            PeerIcon(encounter: encounter, size: 38, circle: false, radius: 10),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(encounter.name,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13.5,
-                          color: Palette.ink)),
-                  Text(fmtDate(encounter.lastMet), style: Ts.caption),
-                ],
-              ),
-            ),
-            Text(encounterLabel(encounter.meetCount),
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Palette.inkSoft)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── スワイプカード画面（開封演出・既存ロジック維持）──────────────────────────
-class _SwipeCardScreen extends StatefulWidget {
-  final List<EncounterRecord> encounters;
-  final VoidCallback onReveal;
-  const _SwipeCardScreen({required this.encounters, required this.onReveal});
-
-  @override
-  State<_SwipeCardScreen> createState() => _SwipeCardScreenState();
-}
-
-class _SwipeCardScreenState extends State<_SwipeCardScreen> {
-  final _ctrl = PageController();
-  int _page = 0;
-  bool _done = false;
-
-  void _next() {
-    if (_page < widget.encounters.length - 1) {
-      _ctrl.nextPage(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut);
-    } else {
-      _complete();
-    }
-  }
-
-  void _skipAll() => _complete();
-
-  void _complete() {
-    if (_done) return;
-    setState(() => _done = true);
-    widget.onReveal();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final total = widget.encounters.length;
-
-    if (_done) {
-      return Scaffold(
-        backgroundColor: Palette.cream,
-        body: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Image.asset('assets/icons/nav_plaza.png', width: 72, height: 72),
-                const SizedBox(height: 24),
-                Text('今日は $total 人と出会いました！',
-                    style: Ts.heading, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                Text('広場に追加されました', style: Ts.caption),
-                const SizedBox(height: 40),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 60),
-                  child: ChunkyButton(
-                    label: 'とじる',
-                    onTap: () => Navigator.pop(context),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: Palette.cream,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned(
-              top: 12,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                    total,
-                    (i) => Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i == _page
-                                ? Palette.coral
-                                : Palette.inkFaint,
-                          ),
-                        )),
-              ),
-            ),
-            Positioned.fill(
-              top: 36,
-              child: PageView.builder(
-                controller: _ctrl,
-                itemCount: total,
-                onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (ctx, i) => _EncounterCard(
-                  encounter: widget.encounters[i],
-                  onNext: _next,
-                  isLast: i == total - 1,
-                ),
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 16,
-              child: TextButton.icon(
-                onPressed: _skipAll,
-                icon: Icon(Icons.fast_forward,
-                    size: 16, color: Palette.inkSoft),
-                label:
-                    Text('スキップ', style: TextStyle(color: Palette.inkSoft)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── 出会いカード（レアリティ演出は既存維持）───────────────────────────────────
-class _EncounterCard extends StatelessWidget {
-  final EncounterRecord encounter;
-  final VoidCallback onNext;
-  final bool isLast;
-  const _EncounterCard(
-      {required this.encounter, required this.onNext, required this.isLast});
-
-  @override
-  Widget build(BuildContext context) {
-    final color =
-        Palette.pastelAvatars[encounter.colorIndex % Palette.pastelAvatars.length];
-    final initial =
-        encounter.name.isNotEmpty ? encounter.name.characters.first : '?';
-    final rarity = cardRarityOf(encounter.meetCount);
-    final tmpl = encounter.template;
-    final cardBg = _rarityCardBackground(rarity, context);
-    final isCommon = rarity == CardRarity.common;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-      child: Column(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: rarityBorderColor(rarity).withValues(alpha: 0.3),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(28),
-                child: Container(
-                  decoration: cardBg,
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: rarityBorderColor(rarity)
-                                  .withValues(alpha: 0.7)),
-                        ),
-                        child: Text(
-                          rarityLabel(rarity),
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: isCommon
-                                  ? rarityBorderColor(rarity)
-                                  : Colors.white),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      // 開封の主役はドット絵。白台座に大きく飾る
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(26),
-                          boxShadow: [
-                            BoxShadow(
-                                color: color.withValues(alpha: 0.5),
-                                blurRadius: 24,
-                                spreadRadius: 6),
-                          ],
-                        ),
-                        child: PeerIcon(
-                            encounter: encounter,
-                            size: 116,
-                            circle: false,
-                            radius: 20),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        encounter.name,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: isCommon ? Palette.ink : Colors.white,
-                            ),
-                      ),
-                      const SizedBox(height: 20),
-                      Divider(
-                          color: isCommon
-                              ? Palette.inkFaint
-                              : Colors.white.withValues(alpha: 0.4)),
-                      const SizedBox(height: 12),
-                      _InfoRow(
-                          icon: Icons.calendar_today_outlined,
-                          label: '初めて出会った日',
-                          value: fmtDate(encounter.firstMet),
-                          light: !isCommon),
-                      if (encounter.prefecture >= 0)
-                        _InfoRow(
-                            icon: Icons.place_outlined,
-                            label: '出身地',
-                            value: _prefName(encounter.prefecture),
-                            light: !isCommon),
-                      const SizedBox(height: 12),
-                      Divider(
-                          color: isCommon
-                              ? Palette.inkFaint
-                              : Colors.white.withValues(alpha: 0.4)),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: isCommon
-                              ? Palette.creamDeep
-                              : Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              '"${tmpl.phraseText}"',
-                              style: TextStyle(
-                                  fontSize: 15,
-                                  fontStyle: FontStyle.italic,
-                                  color: isCommon ? Palette.ink : Colors.white),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${tmpl.statusText}  ·  ${tmpl.hobbyCategoryText}',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: isCommon
-                                      ? Palette.inkSoft
-                                      : Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ChunkyButton(
-            label: isLast ? 'かんりょう！' : 'つぎへ',
-            icon: isLast ? Icons.check : Icons.arrow_forward,
-            onTap: onNext,
-          ),
-          const SizedBox(height: 8),
-          Text('← スワイプでも操作できます →', style: Ts.tiny),
-        ],
-      ),
-    );
-  }
-}
-
-String _prefName(int code) {
-  const names = [
-    '北海道', '青森', '岩手', '宮城', '秋田', '山形', '福島',
-    '茨城', '栃木', '群馬', '埼玉', '千葉', '東京', '神奈川',
-    '新潟', '富山', '石川', '福井', '山梨', '長野',
-    '岐阜', '静岡', '愛知', '三重',
-    '滋賀', '京都', '大阪', '兵庫', '奈良', '和歌山',
-    '鳥取', '島根', '岡山', '広島', '山口',
-    '徳島', '香川', '愛媛', '高知',
-    '福岡', '佐賀', '長崎', '熊本', '大分', '宮崎', '鹿児島', '沖縄',
-  ];
-  if (code < 0 || code >= names.length) return '不明';
-  return names[code];
-}
-
-BoxDecoration _rarityCardBackground(CardRarity r, BuildContext context) {
-  switch (r) {
-    case CardRarity.hologram:
-      return const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFFB721FF),
-            Color(0xFF21D4FD),
-            Color(0xFFFF6B6B),
-            Color(0xFFFFE66D)
-          ],
-          stops: [0.0, 0.33, 0.66, 1.0],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      );
-    case CardRarity.gradient:
-      return const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      );
-    case CardRarity.craft:
-      return const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFD4A574), Color(0xFFA07850)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      );
-    case CardRarity.common:
-      return BoxDecoration(color: Palette.card);
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final bool light;
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.light = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            Icon(icon,
-                size: 16, color: light ? Colors.white70 : Palette.inkSoft),
-            const SizedBox(width: 8),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: light ? Colors.white70 : Palette.inkSoft)),
-            const Spacer(),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: light ? Colors.white : Palette.ink)),
-          ],
-        ),
-      );
 }

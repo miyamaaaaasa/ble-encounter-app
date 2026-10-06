@@ -22,7 +22,7 @@
 | 全UIレイアウト・テーマ確認 | Pixel 10プロファイルで高解像度確認 |
 | オンボーディング/プロフィール初期フロー | クリーンインストールが容易 |
 | 永続化テスト（強制終了→再起動） | am force-stop で再現 |
-| Supabase通信（認証/解析/同期） | ネットワークは実通信 |
+| 自前API通信（認証/解析/同期） | ネットワークは実通信 |
 | 画面回転・フォントスケール・言語 | エミュ設定で網羅 |
 | ダークモード（システム追従含む） | UIモード切替コマンドで自動化可 |
 | ⚠️ 既知問題 | adbがBroken pipeで固まる事象あり→コールドブートで復旧 |
@@ -33,14 +33,14 @@
 | 静的 | null/型/未使用 | flutter analyze | 運用中(Gate1) |
 | unit | PieceData/DotAvatar/EncounterRecordのJSON往復、PlazaLevel閾値、gateTimeFor境界(0時/18時回帰) | flutter test | **P1で新設** |
 | 起動 | クラッシュ即死・FATAL | qa_smoke.sh | 運用中(Gate2) |
-| UI巡回 | 7タブスクショ+AI読解 | qa_smoke.sh + QA_GUIDE.md | 運用中(Gate3) |
+| UI巡回 | 5タブスクショ＋移動先の画面確認+AI読解 | qa_smoke.sh + QA_GUIDE.md | 運用中(Gate3) |
 | golden | 主要Widgetの昼/夜スナップショット | flutter test --update-goldens | P2 |
 | 疑似すれ違い | Scannerへのデバッグ注入でBLEなしE2E | kDebugBle拡張 | P4 |
 
 ### 手動確認が必要なこと（人間）
 - 「気持ちいいか」の最終UX判断（アニメの速度感・音）
 - 実世界すれ違いの体験検証（散歩テスト）
-- Supabaseダッシュボード操作（DDL/Storage設定）
+- サーバーDB／バックアップの管理操作
 - デバイスの物理接続・Bluetooth ON
 
 ---
@@ -90,3 +90,6 @@ adb uninstall jp.hajimemashite.app → install → 起動
 `test/plaza_level_test.dart`
 - 0→Lv1, 4→Lv1, 5→Lv2, 14→Lv2, 15→Lv3, 49→Lv3, 50→Lv4, 99→Lv4,
   100→Lv5, 249→Lv5, 250→Lv6 / next()の進捗計算
+
+## 2026-10-06 UI巡回の更新
+今日／広場／ゲーム／図鑑／じぶんを巡回。バッジは図鑑、カケラはゲーム、設定とプロフィール編集はじぶんから開く。OSの夜設定だけでなくアプリ内のテーマ設定を確認する（保存したライト設定はOS設定より優先）。背景の昼夜は端末時刻に従い、UI配色と独立する。

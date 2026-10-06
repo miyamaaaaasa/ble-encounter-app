@@ -15,6 +15,9 @@ import 'package:ble_encounter/providers/broadcast_provider.dart';
 import 'package:ble_encounter/services/broadcast_service.dart';
 import 'package:ble_encounter/ui/theme/palette.dart';
 import 'package:ble_encounter/ui/today_screen.dart';
+import 'package:ble_encounter/ui/home_screen.dart';
+import 'package:ble_encounter/providers/puzzle_providers.dart';
+import 'package:ble_encounter/ui/community_tabs.dart';
 import 'package:ble_encounter/ui/widgets/ui_kit.dart';
 import 'package:ble_encounter/ui/widgets/user_icon.dart';
 
@@ -26,6 +29,14 @@ class _App extends AppNotifier {
   AppState build() => initial;
   @override
   Future<void> revealToday() async => reveals++;
+}
+
+class _Puzzle extends PuzzleNotifier {
+  @override
+  PuzzleState build() => const PuzzleState();
+  @override
+  Future<List<Never>> resolvePending({onProgress, onProfileResolved}) async =>
+      [];
 }
 
 class _Broadcasts extends BroadcastNotifier {
@@ -54,10 +65,8 @@ const _items = [
   DockItem(asset: 'assets/icons/nav_today.png', label: '今日'),
   DockItem(asset: 'assets/icons/nav_plaza.png', label: '広場'),
   DockItem(asset: 'assets/icons/nav_game.png', label: 'ゲーム'),
-  DockItem(asset: 'assets/icons/nav_badge.png', label: 'バッジ'),
-  DockItem(asset: 'assets/icons/nav_kakera.png', label: 'カケラ'),
+  DockItem(custom: Icon(Icons.menu_book_outlined, size: 26), label: '図鑑'),
   DockItem(custom: UserIcon(), label: 'じぶん'),
-  DockItem(asset: 'assets/icons/nav_settings.png', label: '設定'),
 ];
 
 EncounterRecord _person(String name, DateTime date, {bool revealed = true}) =>
@@ -87,27 +96,36 @@ Future<void> _pump(WidgetTester tester, _App app, _Broadcasts broadcasts,
         broadcastProvider.overrideWith((ref) => broadcasts),
       ],
       child: MaterialApp(
-          theme: ThemeData(fontFamily: const bool.fromEnvironment('WRITE_TODAY_SCREENSHOTS') ? 'TodayQA' : null),
+          theme: ThemeData(
+              fontFamily: const bool.fromEnvironment('WRITE_TODAY_SCREENSHOTS')
+                  ? 'TodayQA'
+                  : null),
           home: MediaQuery(
-        data: MediaQueryData(
-            size: Size(width, 844), textScaler: TextScaler.linear(textScale)),
-        child: RepaintBoundary(
-            key: captureKey,
-            child: Scaffold(
-              backgroundColor: Palette.cream,
-              body: const TodayScreen(),
-              bottomNavigationBar: GameDock(
-                  items: _items, selected: 0, onSelect: onSelect ?? (_) {}),
-            )),
-      ))));
+            data: MediaQueryData(
+                size: Size(width, 844),
+                textScaler: TextScaler.linear(textScale)),
+            child: RepaintBoundary(
+                key: captureKey,
+                child: Scaffold(
+                  backgroundColor: Palette.cream,
+                  body: const TodayScreen(),
+                  bottomNavigationBar: GameDock(
+                      items: _items, selected: 0, onSelect: onSelect ?? (_) {}),
+                )),
+          ))));
   await tester.pump(const Duration(seconds: 1));
   if (const bool.fromEnvironment('WRITE_TODAY_SCREENSHOTS')) {
     await tester.runAsync(() async {
       final context = tester.element(find.byType(TodayScreen));
       for (final path in [
-        'assets/today/plaza_light.png', 'assets/today/plaza_dark.png',
-        ..._items.where((item) => item.asset != null).map((item) => item.asset!),
-        'assets/gate/gate_morning.png', 'assets/gate/gate_noon.png', 'assets/gate/gate_night.png',
+        'assets/today/plaza_light.png',
+        'assets/today/plaza_dark.png',
+        ..._items
+            .where((item) => item.asset != null)
+            .map((item) => item.asset!),
+        'assets/gate/gate_morning.png',
+        'assets/gate/gate_noon.png',
+        'assets/gate/gate_night.png',
       ]) {
         await precacheImage(AssetImage(path), context);
       }
@@ -123,9 +141,12 @@ Future<void> _dispose(WidgetTester tester) async {
 
 void main() {
   setUpAll(() async {
-    if (const bool.fromEnvironment('WRITE_TODAY_SCREENSHOTS') && Platform.isWindows) {
+    if (const bool.fromEnvironment('WRITE_TODAY_SCREENSHOTS') &&
+        Platform.isWindows) {
       final font = FontLoader('TodayQA')
-        ..addFont(File(r'C:\Windows\Fonts\meiryo.ttc').readAsBytes().then(ByteData.sublistView));
+        ..addFont(File(r'C:\Windows\Fonts\meiryo.ttc')
+            .readAsBytes()
+            .then(ByteData.sublistView));
       await font.load();
       final icons = FontLoader('MaterialIcons')
         ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
@@ -139,7 +160,7 @@ void main() {
   tearDown(() => Palette.night = false);
 
   testWidgets(
-      'Both themes, narrow screens and enlarged text retain seven tabs and metadata',
+      'Both themes, narrow screens and enlarged text retain five tabs and revealed history',
       (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -164,20 +185,6 @@ void main() {
               onSelect: (i) => selected = i,
               captureKey: key);
           expect(tester.takeException(), isNull);
-          expect(find.text('きょうは 3人 と出会えたよ'), findsOneWidget);
-          expect(find.text('すれ違い中！ · よく見る'), findsOneWidget);
-          expect(find.textContaining('すれ違ったよ'), findsOneWidget);
-          for (final item in _items) {
-            expect(find.text(item.label), findsOneWidget);
-          }
-          await tester.ensureVisible(find.byType(PageView).first);
-          await tester.pump();
-          await tester.drag(find.byType(PageView).first, Offset(-width * 0.36, 0));
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 500));
-          expect(find.text('こむぎ'), findsOneWidget);
-          await tester.tap(find.text('設定'));
-          expect(selected, 6);
           if (const bool.fromEnvironment('WRITE_TODAY_SCREENSHOTS') &&
               width == 390 &&
               scale == 1) {
@@ -188,12 +195,23 @@ void main() {
               final data =
                   await image.toByteData(format: ui.ImageByteFormat.png);
               final file =
-                  File('qa_out/today-v2/${dark ? 'dark' : 'light'}.png');
+                  File('qa_out/world-ui/${dark ? 'dark' : 'light'}.png');
               await file.parent.create(recursive: true);
               await file.writeAsBytes(data!.buffer.asUint8List());
               image.dispose();
             });
           }
+          await tester.scrollUntilVisible(find.text('3人 と出会いました！'), 200,
+              scrollable: find.byType(Scrollable).first);
+          await tester.pump();
+          expect(find.text('3人 と出会いました！'), findsOneWidget);
+          expect(find.text('スキャン中'), findsNothing);
+          expect(find.text('停止中'), findsNothing);
+          for (final item in _items) {
+            expect(find.text(item.label), findsOneWidget);
+          }
+          await tester.tap(find.text('じぶん'));
+          expect(selected, 4);
           await tester.scrollUntilVisible(find.text('はな'), 300,
               scrollable: find.byType(Scrollable).first);
           await tester.pump(const Duration(milliseconds: 500));
@@ -218,23 +236,79 @@ void main() {
     final broadcasts = _Broadcasts();
     await _pump(tester, app, broadcasts);
     expect(find.text('未開封の相手'), findsNothing);
-    expect(find.text('おやすみ中'), findsOneWidget);
+    expect(find.text('停止中'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
     await tester.pump();
     expect(broadcasts.dismissed, isTrue);
     expect(find.text('文化祭へようこそ！'), findsNothing);
     // ponytail: live clock; inject a clock if pre-09:00 QA must exercise reveal.
     if (now.hour >= 9) {
-      await tester.ensureVisible(find.text('1人 あける！'));
-      await tester.tap(find.text('1人 あける！'));
+      await tester.ensureVisible(find.text('門をあける'));
+      await tester.tap(find.text('門をあける'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('未開封の相手'), findsOneWidget);
+      expect(find.text('門がひらきます…'), findsOneWidget);
       await tester.tap(find.text('スキップ'));
       await tester.pump(const Duration(milliseconds: 500));
       expect(app.reveals, 1);
+      expect(find.text('と出会いました！'), findsOneWidget);
+      expect(find.text('シェアする'), findsOneWidget);
     }
     expect(tester.takeException(), isNull);
     await _dispose(tester);
+  });
+  testWidgets(
+      'Five tabs retain badge, pieces, profile editor and settings routes',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final dark in [false, true]) {
+      Palette.night = dark;
+      await tester.pumpWidget(ProviderScope(
+          overrides: [
+            appProvider.overrideWith(() => _App(AppState(
+                isLoading: false,
+                isRunning: true,
+                encounters: List.generate(
+                    8,
+                    (i) => _person('住民$i',
+                        DateTime.now().subtract(const Duration(days: 1))))))),
+            broadcastProvider.overrideWith((ref) => _Broadcasts()),
+            puzzleProvider.overrideWith(_Puzzle.new),
+          ],
+          child: MaterialApp(
+              home: MediaQuery(
+                  data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+                  child: const HomeScreen()))));
+      await tester.pump();
+      for (final tab in ['今日', '広場', 'ゲーム', '図鑑', 'じぶん']) {
+        await tester.tap(find.descendant(
+            of: find.byType(GameDock), matching: find.text(tab)));
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: tab);
+      }
+      expect(find.text('プロフィールを編集'), findsOneWidget);
+      expect(find.byTooltip('設定'), findsOneWidget);
+      await tester.tap(find.byTooltip('設定'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(find.text('テーマ'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('戻る'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.tap(find.descendant(
+          of: find.byType(GameDock), matching: find.text('図鑑')));
+      await tester.pump();
+      await tester.tap(find.text('バッジ'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(find.text('バッジずかん'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 12));
+    }
   });
 }

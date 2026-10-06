@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/app_badge.dart';
+import 'badge_screen.dart';
+import 'community_tabs.dart';
+import 'puzzle/puzzle_board_screen.dart';
+import 'widgets/pixel_world.dart';
 import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart';
 import '../providers/puzzle_providers.dart';
@@ -10,7 +13,6 @@ import 'theme/palette.dart';
 import 'widgets/peer_icon.dart';
 import 'widgets/plaza_scene.dart';
 import 'widgets/ui_kit.dart';
-import 'widgets/user_icon.dart';
 
 // BGM トラック定義（音声ファイルは assets/bgm/ に配置してください）
 String bgmTrackFor(int total) {
@@ -41,154 +43,63 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
     final puzzle = ref.watch(puzzleProvider);
     final revealed = state.encounters.where((e) => e.isRevealed).toList()
       ..sort((a, b) => b.lastMet.compareTo(a.lastMet));
-    final total = revealed.length;
-    final badges = state.badges;
-    final recentBadges = [...badges]
-      ..sort((a, b) => b.earnedAt.compareTo(a.earnedAt));
-
-    return Container(
-      color: Palette.cream,
-      child: CustomScrollView(
-        slivers: [
+    return WorldPage(
+        strength: .65,
+        child: CustomScrollView(slivers: [
           SliverToBoxAdapter(
-            child: ScreenHeader(
-              title: 'みんなの広場',
-              asset: 'assets/icons/tab_plaza.png',
-              trailing: Row(
-                children: [
-                  const UserIcon(size: 30, radius: 8),
-                  const SizedBox(width: 8),
-                  StatChip(
-                    emoji: '👥',
-                    label: 'のべ $total人',
-                    color: Palette.coral.withValues(alpha: 0.18),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ─── 広場シーン（住民が集まる空間・レベルで発展）───────
+              child: ScreenHeader(
+                  title: '広場', asset: 'assets/icons/nav_plaza.png')),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-              child: PlazaScene(
-                residents: revealed,
-                totalCount: total,
-                onTapResident: (e) =>
-                    EncounterDetailSheet.show(context, e),
-              ),
-            ),
-          ),
-
-          // ─── コレクション状況（バッジ＆カケラ）────────────────
+              child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: PixelPanel(
+                      child: Text('いろんな場所で\nすれ違いの気配が届いているよ',
+                          style: Ts.body, textAlign: TextAlign.center)))),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SoftPanel(
-                      color: Palette.lavender.withValues(alpha: 0.16),
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text('🏅', style: TextStyle(fontSize: 20)),
-                              const SizedBox(width: 6),
-                              Text('バッジ', style: Ts.title),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text('${badges.length}個',
-                              style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: Palette.lavenderDeep)),
-                          if (recentBadges.isNotEmpty)
-                            Text(
-                              '最新: ${recentBadges.first.emoji} ${recentBadges.first.title}',
-                              style: Ts.tiny,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SoftPanel(
-                      color: Palette.sky.withValues(alpha: 0.16),
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text('💎', style: TextStyle(fontSize: 20)),
-                              const SizedBox(width: 6),
-                              Text('カケラ', style: Ts.title),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text('${puzzle.pieces.length}枚',
-                              style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w800,
-                                  color: Palette.tealDeep)),
-                          Text('すれ違いで集まる', style: Ts.tiny),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ─── 住民名簿 ─────────────────────────────────────────
+              child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: PlazaScene(
+                      residents: revealed,
+                      totalCount: revealed.length,
+                      onTapResident: (e) =>
+                          EncounterDetailSheet.show(context, e)))),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: SectionLabel('📛', 'であった人ぜんいん',
-                  trailing: Text('$total人', style: Ts.caption)),
-            ),
-          ),
-
+              child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Wrap(spacing: 12, runSpacing: 12, children: [
+                    TextButton.icon(
+                        onPressed: () =>
+                            openCommunityScreen(context, const BadgeScreen()),
+                        icon: Image.asset('assets/icons/nav_badge.png',
+                            width: 24),
+                        label: Text('バッジ ${state.badges.length}個')),
+                    TextButton.icon(
+                        onPressed: () => openCommunityScreen(
+                            context, const PuzzleBoardScreen()),
+                        icon: Image.asset('assets/icons/nav_kakera.png',
+                            width: 24),
+                        label: Text('カケラ ${puzzle.pieces.length}枚')),
+                  ]))),
+          SliverToBoxAdapter(
+              child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text('であった人ぜんいん', style: Ts.title))),
           if (revealed.isEmpty)
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: SoftPanel(
-                  padding: EdgeInsets.symmetric(vertical: 36),
-                  child: Column(
-                    children: [
-                      Text('🌱', style: TextStyle(fontSize: 48)),
-                      SizedBox(height: 12),
-                      Text('まだ誰も来ていません', style: Ts.title),
-                      SizedBox(height: 6),
-                      Text('外に出て、誰かとすれ違ってみよう！', style: Ts.caption),
-                    ],
-                  ),
-                ),
-              ),
-            )
+                child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: PixelPanel(
+                        child: Text('まだ誰も来ていません\nすれ違って、門をあけてみよう。',
+                            style: Ts.body))))
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-              sliver: SliverList.builder(
-                itemCount: revealed.length,
-                itemBuilder: (ctx, i) => _ResidentTile(encounter: revealed[i]),
-              ),
-            ),
-
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList.builder(
+                    itemCount: revealed.length,
+                    itemBuilder: (_, i) =>
+                        _ResidentTile(encounter: revealed[i]))),
           const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
-        ],
-      ),
-    );
+        ]));
   }
 }
 
@@ -244,12 +155,8 @@ class _ResidentTile extends StatelessWidget {
                       ),
                       if (encounter.peerBadgeLevel > 0) ...[
                         const SizedBox(width: 6),
-                        Text(
-                          AppBadge.badgeLevelLabel(encounter.peerBadgeLevel)
-                              .split(' ')
-                              .first,
-                          style: const TextStyle(fontSize: 13),
-                        ),
+                        Icon(Icons.workspace_premium,
+                            size: 18, color: Palette.sun),
                       ],
                     ],
                   ),
@@ -287,4 +194,3 @@ class _ResidentTile extends StatelessWidget {
     );
   }
 }
-

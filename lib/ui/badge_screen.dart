@@ -50,9 +50,9 @@ class BadgeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appProvider);
     final badges = state.badges;
-    final sorted = [...badges]..sort((a, b) => b.earnedAt.compareTo(a.earnedAt));
-    final revealedCount =
-        state.encounters.where((e) => e.isRevealed).length;
+    final sorted = [...badges]
+      ..sort((a, b) => b.earnedAt.compareTo(a.earnedAt));
+    final revealedCount = state.encounters.where((e) => e.isRevealed).length;
     final (next, prev) = _nextMilestone(revealedCount);
     final progress =
         next == prev ? 1.0 : (revealedCount - prev) / (next - prev);
@@ -64,12 +64,8 @@ class BadgeScreen extends ConsumerWidget {
           SliverToBoxAdapter(
             child: ScreenHeader(
               title: 'バッジずかん',
-              asset: 'assets/icons/tab_badge.png',
-              trailing: StatChip(
-                emoji: '✨',
-                label: '${sorted.length}個',
-                color: Palette.lavender.withValues(alpha: 0.22),
-              ),
+              asset: 'assets/icons/nav_badge.png',
+              trailing: Text('${sorted.length}個', style: Ts.caption),
             ),
           ),
 
@@ -78,16 +74,19 @@ class BadgeScreen extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
               child: SoftPanel(
+                radius: 8,
                 color: Palette.sun.withValues(alpha: 0.18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const Text('🎯', style: TextStyle(fontSize: 22)),
+                        Icon(Icons.flag_outlined, color: Palette.ink),
                         const SizedBox(width: 8),
                         Text('つぎの目標', style: Ts.title),
-                        const Spacer(),
                         Text('${next}人とすれ違う',
                             style: TextStyle(
                                 fontSize: 13,
@@ -113,15 +112,16 @@ class BadgeScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: SoftPanel(
+                  radius: 8,
                   padding: EdgeInsets.symmetric(vertical: 36),
                   child: Column(
                     children: [
-                      Text('🏅', style: TextStyle(fontSize: 48)),
+                      Image.asset('assets/icons/nav_badge.png',
+                          width: 48, height: 48),
                       SizedBox(height: 12),
                       Text('まだバッジがありません', style: Ts.title),
                       SizedBox(height: 6),
-                      Text('プロフィールを設定するとスタートバッジが届きます',
-                          style: Ts.caption),
+                      Text('プロフィールを設定するとスタートバッジが届きます', style: Ts.caption),
                     ],
                   ),
                 ),
@@ -131,7 +131,7 @@ class BadgeScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                child: SectionLabel('🗃️', 'コレクション'),
+                child: Text('コレクション', style: Ts.title),
               ),
             ),
             SliverPadding(
@@ -155,7 +155,7 @@ class BadgeScreen extends ConsumerWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: SectionLabel('🗾', 'ちいき制覇（じゅんびちゅう）'),
+              child: Text('ちいき制覇（じゅんびちゅう）', style: Ts.title),
             ),
           ),
           SliverToBoxAdapter(
@@ -196,6 +196,7 @@ class _BadgeCell extends StatelessWidget {
     final rarity = BadgeScreen._rarityLabel(badge);
 
     return SoftPanel(
+      radius: 8,
       padding: const EdgeInsets.all(14),
       shadowTint: color,
       child: Column(
@@ -210,7 +211,8 @@ class _BadgeCell extends StatelessWidget {
               border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
             ),
             child: Center(
-              child: Text(badge.emoji, style: const TextStyle(fontSize: 30)),
+              child: Image.asset('assets/icons/nav_badge.png',
+                  width: 36, height: 36),
             ),
           ),
           const SizedBox(height: 10),
@@ -219,7 +221,9 @@ class _BadgeCell extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w800, color: Palette.ink)),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: Palette.ink)),
           const SizedBox(height: 3),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -251,12 +255,13 @@ class _RegionChip extends StatelessWidget {
       child: Opacity(
         opacity: 0.55,
         child: SoftPanel(
+          radius: 8,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           color: Palette.creamDeep,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 22)),
+              Icon(Icons.landscape_outlined, color: Palette.inkSoft),
               const SizedBox(height: 4),
               Text(name,
                   style: TextStyle(
