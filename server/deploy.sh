@@ -12,7 +12,7 @@ HOST=itoen@153.125.148.69
 DIR=/home/itoen/hajimemashite/server
 
 echo "== ファイル転送 =="
-scp main.go Dockerfile compose.yml Caddyfile "$HOST:$DIR/"
+scp *.go go.mod go.sum Dockerfile compose.yml Caddyfile "$HOST:$DIR/"
 scp -r admin_panel "$HOST:$DIR/"
 
 echo "== サーバー側で反映 =="

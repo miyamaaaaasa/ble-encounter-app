@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/ble_providers.dart';
 import 'providers/theme_provider.dart';
 import 'ui/home_screen.dart';
+import 'ui/account_access_gate.dart';
 import 'ui/onboarding_screen.dart';
 import 'ui/profile_screen.dart';
 import 'ui/theme/palette.dart';
@@ -15,9 +16,9 @@ class App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(themeProvider);
     // Palette.night を確定させてから全ウィジェットを構築する
-    final platformDark = SchedulerBinding
-            .instance.platformDispatcher.platformBrightness ==
-        Brightness.dark;
+    final platformDark =
+        SchedulerBinding.instance.platformDispatcher.platformBrightness ==
+            Brightness.dark;
     Palette.night = switch (mode) {
       ThemeMode.dark => true,
       ThemeMode.light => false,
@@ -31,7 +32,7 @@ class App extends ConsumerWidget {
       theme: _buildTheme(false),
       darkTheme: _buildTheme(true),
       themeMode: mode,
-      home: const _RootScreen(),
+      home: const AccountAccessGate(child: _RootScreen()),
     );
   }
 

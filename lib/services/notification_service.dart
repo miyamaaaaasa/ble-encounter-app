@@ -7,6 +7,8 @@ import 'package:timezone/timezone.dart' as tz;
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
 
+  static Future<void> cancelAccountNotifications() => _plugin.cancelAll();
+
   static const dailyChannelId     = 'daily_result';
   static const eventChannelId     = 'event_info';
   static const encounterChannelId = 'encounter_detect';

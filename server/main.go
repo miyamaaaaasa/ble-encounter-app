@@ -33,11 +33,11 @@ import (
 )
 
 const (
-	pixelCount     = 256              // 16x16 ドット絵
-	packedPixels   = pixelCount / 2   // 4bit/px → 128 byte
-	tokenTTL       = 24 * time.Hour   // BLEトークンの有効期間
-	resolveWindow  = 48 * time.Hour   // 解析対象として受け付ける期間
-	maxBodyBytes   = 32 << 10         // 32KB（ドット絵込みでも十分）
+	pixelCount     = 256            // 16x16 ドット絵
+	packedPixels   = pixelCount / 2 // 4bit/px → 128 byte
+	tokenTTL       = 24 * time.Hour // BLEトークンの有効期間
+	resolveWindow  = 48 * time.Hour // 解析対象として受け付ける期間
+	maxBodyBytes   = 32 << 10       // 32KB（ドット絵込みでも十分）
 	maxNameRunes   = 20
 	maxResolveList = 200
 )
@@ -94,11 +94,11 @@ func (l *limiter) allow(key string) bool {
 }
 
 var (
-	signupLimiter   = newLimiter(5, 5)     // 匿名登録: 5回/分（新規ユーザー乱造の抑止）
-	apiLimiter      = newLimiter(120, 60)  // 通常API: 120回/分
-	adminLimiter    = newLimiter(20, 10)   // 管理者API: 20回/分（総当たり対策）
-	adminTokenHash  [32]byte               // ADMIN_TOKEN のSHA-256（起動時に一度だけ計算）
-	adminEnabled    bool                   // ADMIN_TOKEN が設定されている場合のみ有効
+	signupLimiter  = newLimiter(5, 5)    // 匿名登録: 5回/分（新規ユーザー乱造の抑止）
+	apiLimiter     = newLimiter(120, 60) // 通常API: 120回/分
+	adminLimiter   = newLimiter(20, 10)  // 管理者API: 20回/分（総当たり対策）
+	adminTokenHash [32]byte              // ADMIN_TOKEN のSHA-256（起動時に一度だけ計算）
+	adminEnabled   bool                  // ADMIN_TOKEN が設定されている場合のみ有効
 )
 
 // ─── ドット絵の圧縮（4bit/px パック）─────────────────────────────────────
@@ -134,7 +134,7 @@ func unpackPixels(buf []byte) []int {
 func initDB(path string) error {
 	var err error
 	// WAL + NORMAL同期: 小規模同時アクセスで高速かつ安全
-	db, err = sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)")
+	db, err = sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=secure_delete(ON)")
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ CREATE INDEX IF NOT EXISTS idx_mutual_target ON mutual_encounters(target_user_id
 		_, _ = db.Exec(alter)
 	}
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen_at)`)
-	return nil
+	return initAccounts()
 }
 
 func randHex(n int) string {
@@ -249,7 +249,7 @@ func authUser(r *http.Request) (string, bool) {
 
 	var id string
 	var stored []byte
-	err := db.QueryRow(`SELECT id, key_hash FROM users WHERE key_hash = ?`, sum[:]).Scan(&id, &stored)
+	err := db.QueryRow(`SELECT id, key_hash FROM users WHERE key_hash = ? AND deleted_at IS NULL`, sum[:]).Scan(&id, &stored)
 	if err != nil {
 		return "", false
 	}
@@ -387,7 +387,7 @@ func handleResolveTokens(w http.ResponseWriter, r *http.Request) {
 
 	q := `SELECT t.token, u.id, u.display_name, u.color_index, u.piece_data, u.badge_level, COALESCE(u.avatar_url,'')
 	      FROM tokens t JOIN users u ON u.id = t.user_id
-	      WHERE t.token IN (` + strings.Join(ph, ",") + `)`
+	      WHERE u.deleted_at IS NULL AND t.token IN (` + strings.Join(ph, ",") + `)`
 	rows, err := db.Query(q, args...)
 	if err != nil {
 		log.Printf("resolve: %v", err)
@@ -461,8 +461,14 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 
 	if req.DisplayName != nil {
 		n := strings.TrimSpace(*req.DisplayName)
-		if len([]rune(n)) > maxNameRunes {
-			n = string([]rune(n)[:maxNameRunes])
+		allowed, err := nameAllowed(n)
+		if err != nil {
+			writeErr(w, 500, "server error")
+			return
+		}
+		if !allowed {
+			writeErr(w, 422, "name_unavailable")
+			return
 		}
 		sets = append(sets, "display_name = ?")
 		args = append(args, n)
@@ -778,12 +784,12 @@ func handleAdminStats(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"users": map[string]any{
-			"total":      count("SELECT count(*) FROM users"),
-			"active_5m":  count("SELECT count(*) FROM users WHERE last_seen_at > ?", now.Add(-5*time.Minute).Unix()),
-			"active_1h":  count("SELECT count(*) FROM users WHERE last_seen_at > ?", now.Add(-time.Hour).Unix()),
-			"active_24h": count("SELECT count(*) FROM users WHERE last_seen_at > ?", now.Add(-24*time.Hour).Unix()),
-			"with_name":  count("SELECT count(*) FROM users WHERE display_name <> ''"),
-			"with_piece": count("SELECT count(*) FROM users WHERE piece_data IS NOT NULL"),
+			"total":      count("SELECT count(*) FROM users WHERE deleted_at IS NULL"),
+			"active_5m":  count("SELECT count(*) FROM users WHERE deleted_at IS NULL AND last_seen_at > ?", now.Add(-5*time.Minute).Unix()),
+			"active_1h":  count("SELECT count(*) FROM users WHERE deleted_at IS NULL AND last_seen_at > ?", now.Add(-time.Hour).Unix()),
+			"active_24h": count("SELECT count(*) FROM users WHERE deleted_at IS NULL AND last_seen_at > ?", now.Add(-24*time.Hour).Unix()),
+			"with_name":  count("SELECT count(*) FROM users WHERE deleted_at IS NULL AND display_name <> ''"),
+			"with_piece": count("SELECT count(*) FROM users WHERE deleted_at IS NULL AND piece_data IS NOT NULL"),
 		},
 		"tokens":     count("SELECT count(*) FROM tokens"),
 		"broadcasts": count("SELECT count(*) FROM broadcasts"),
@@ -863,7 +869,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query("SELECT id, display_name, color_index, piece_data, badge_level,"+
 		" created_at, last_seen_at, intro_status, intro_hobby_cat, intro_hobby_det, intro_phrase"+
-		" FROM users ORDER BY last_seen_at DESC, created_at DESC LIMIT ? OFFSET ?", limit, offset)
+		" FROM users WHERE deleted_at IS NULL ORDER BY last_seen_at DESC, created_at DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "db error")
 		return
@@ -886,7 +892,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, map[string]any{
 			// IDは先頭8文字のみ（照合には足り、全体は見せない）
-			"id":         short,
+			"id":         id,
 			"name":       name,
 			"color":      color,
 			"badge":      badge,
@@ -897,7 +903,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	var total int
-	_ = db.QueryRow("SELECT count(*) FROM users").Scan(&total)
+	_ = db.QueryRow("SELECT count(*) FROM users WHERE deleted_at IS NULL").Scan(&total)
 	writeJSON(w, http.StatusOK, map[string]any{"total": total, "users": out})
 }
 
@@ -976,7 +982,7 @@ func handleMutualEncounters(w http.ResponseWriter, r *http.Request) {
 		"SELECT m.peer_user_id, m.met_at, u.display_name, u.color_index, u.piece_data,"+
 			" u.badge_level, u.intro_status, u.intro_hobby_cat, u.intro_hobby_det, u.intro_phrase"+
 			" FROM mutual_encounters m JOIN users u ON u.id = m.peer_user_id"+
-			" WHERE m.target_user_id = ? AND m.met_at > ?"+
+			" WHERE u.deleted_at IS NULL AND m.target_user_id = ? AND m.met_at > ?"+
 			" ORDER BY m.met_at DESC LIMIT 200",
 		uid, time.Now().Add(-resolveWindow).Unix())
 	if err != nil {
@@ -1023,6 +1029,10 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 // ─── ミドルウェア ───────────────────────────────────────────────────────
 func withCommon(next http.HandlerFunc, method string, limited bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if limited {
+			accountMu.RLock()
+			defer accountMu.RUnlock()
+		}
 		if r.Method != method {
 			w.Header().Set("Allow", method)
 			writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1030,6 +1040,10 @@ func withCommon(next http.HandlerFunc, method string, limited bool) http.Handler
 		}
 		if limited && !apiLimiter.allow(clientIP(r)) {
 			writeErr(w, http.StatusTooManyRequests, "rate limited")
+			return
+		}
+		if limited && revoked(r) {
+			writeErr(w, http.StatusForbidden, "account_inactive")
 			return
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -1104,6 +1118,11 @@ func main() {
 	mux.HandleFunc("/v1/tokens/issue", withCommon(handleIssueToken, http.MethodPost, true))
 	mux.HandleFunc("/v1/tokens/resolve", withCommon(handleResolveTokens, http.MethodPost, true))
 	mux.HandleFunc("/v1/profile", withCommon(handleProfile, http.MethodPost, true))
+	mux.HandleFunc("/v1/account/session", withCommon(handleSession, http.MethodPost, true))
+	mux.HandleFunc("/v1/auth/reconnect", withCommon(handleReconnect, http.MethodPost, false))
+	mux.HandleFunc("/admin/api/words", handleWords)
+	mux.HandleFunc("/admin/api/trash", handleTrash)
+	mux.HandleFunc("/admin/api/user-actions", withCommon(handleUserAction, http.MethodPost, false))
 	mux.HandleFunc("/v1/account", withCommon(handleDeleteAccount, http.MethodDelete, true))
 	mux.HandleFunc("/v1/broadcasts", withCommon(handleBroadcasts, http.MethodGet, true))
 	mux.HandleFunc("/v1/encounters/mutual", withCommon(handleMutualEncounters, http.MethodGet, true))
@@ -1127,6 +1146,14 @@ func main() {
 
 	// 定期メンテナンス: 期限切れトークンの掃除 + バックアップ世代管理。
 	// 別プロセス・別イメージを立てずにAPI内で完結させ、常駐リソースを増やさない。
+	go func() {
+		for {
+			if err := purgeDeleted(time.Now()); err != nil {
+				log.Printf("account purge: %v", err)
+			}
+			time.Sleep(time.Hour)
+		}
+	}()
 	go func() {
 		backupDir := filepathJoin(dbPath, "backups")
 		_ = os.MkdirAll(backupDir, 0o700)

@@ -1,6 +1,14 @@
 # iOS版 — 現況と検証計画
 
-最終更新: 2026-10-05 / 現行Git HEAD: `2381229`（beta1.13.0+53）
+最終更新: 2026-10-07 / 現行: beta1.13.4+57
+
+## 今回のiOS更新
+
+CupertinoTabBarで5画面を保持。タブ遷移のWidgetテスト合格。Macの別チェックアウト `~/development/ble-encounter-codex-accounts` で署名なしreleaseをビルド済み。元チェックアウトの未コミット署名変更は保持。
+SSH署名はerrSecInternalComponentで失敗。自動ビルド用LaunchAgentの登録は未承認の永続化として自動承認レビューに拒否され、登録していない。実機はオフラインだったため署名付きインストール未完了。
+MacのGUI Terminalで `cd ~/development/ble-encounter-codex-accounts && bash tool/ios_release.sh <device-id>` を実行できる。
+
+以下のBLE記録は過去の検証と現在の未確認項目。
 
 ## 実装済み
 

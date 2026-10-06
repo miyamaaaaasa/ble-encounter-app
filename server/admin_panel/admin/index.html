@@ -18,7 +18,7 @@
   h1 { font-size: 17px; margin: 0 0 14px; }
 
   /* ─── タブ ─── */
-  .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .tabs { flex-wrap: wrap; display: flex; gap: 6px; margin-bottom: 18px; }
   .tabs button {
     flex: 1; padding: 10px 6px; border: 1px solid #e0d3bd; border-radius: 10px;
     background: #FFFDF8; color: #8A7A6B; font-size: 13px; font-weight: bold;
@@ -83,6 +83,10 @@
          background: #BFB0A0; margin-right: 4px; vertical-align: middle; }
   .dot.on { background: #06D6A0; }
 
+  dialog { width:min(92vw,540px); border:1px solid #d8c9b3; border-radius:12px; padding:20px; background:#FFFDF8; color:#4A3C31; }
+  dialog::backdrop { background:#0008; }
+  #trashList p { white-space:pre-wrap; overflow-wrap:anywhere; }
+  dialog p { white-space:pre-wrap; overflow-wrap:anywhere; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   td { padding: 4px 0; }
   td.r { text-align: right; color: #8A7A6B; }
@@ -98,6 +102,8 @@
   <div class="tabs" role="tablist">
     <button id="tabDash" role="tab" aria-selected="true">📊 状況</button>
     <button id="tabUsers" role="tab" aria-selected="false">👥 利用者</button>
+    <button id="tabWords" role="tab" aria-selected="false">NGワード管理</button>
+    <button id="tabTrash" role="tab" aria-selected="false">ゴミ箱</button>
     <button id="tabSend" role="tab" aria-selected="false">📣 配信</button>
   </div>
 
@@ -159,7 +165,7 @@
       <h2>利用者のプロフィール</h2>
       <p class="muted" style="margin:0 0 12px">
         表示しているのは、利用者が<b>すれ違った相手に見せる前提で設定した情報</b>だけです。
-        すれ違いの履歴・位置・APIキーは記録も表示もしていません。
+        この画面には履歴・位置・認証キーを表示しません。復元用データは保護された領域に保存します。
       </p>
       <div class="users" id="userList"></div>
       <div class="status" id="usersStatus"></div>
@@ -189,6 +195,19 @@
     </div>
   </section>
 
+<section id="secWords" hidden>
+  <div class="card"><h2>NGワード管理</h2>
+    <p class="muted">名前に含まれる単語を部分一致で判定します。英字の大小・全半角・合成文字の表記ゆれは区別しません。</p>
+    <ul id="wordList"></ul><label for="newWord">NGワード</label>
+    <input id="newWord" maxlength="100"><button class="action" id="addWord">＋ NGワードを追加</button>
+    <div role="status" id="wordsStatus"></div></div>
+</section>
+<section id="secTrash" hidden><div class="card"><h2>ゴミ箱</h2>
+ <p class="muted">サーバー時刻で30日間保持します。復元後も本人の再接続が必要です。</p>
+ <div id="trashList"></div><div role="status" id="trashStatus"></div></div></section>
+<dialog id="confirmDialog" aria-labelledby="confirmTitle"><h2 id="confirmTitle"></h2>
+ <p id="confirmBody"></p><button id="confirmCancel" type="button">キャンセル</button>
+ <button class="action" id="confirmProceed" type="button"></button></dialog>
 <script>
   const $ = (id) => document.getElementById(id);
 
@@ -229,7 +248,7 @@
   };
 
   // ─── タブ切り替え ───
-  const tabs = [['tabDash','secDash'], ['tabUsers','secUsers'], ['tabSend','secSend']];
+  const tabs = [['tabDash','secDash'], ['tabUsers','secUsers'], ['tabSend','secSend'], ['tabWords','secWords'], ['tabTrash','secTrash']];
   tabs.forEach(([btn, sec]) => $(btn).addEventListener('click', () => {
     tabs.forEach(([b, s]) => {
       $(b).setAttribute('aria-selected', b === btn);
@@ -237,6 +256,8 @@
     });
     if (sec === 'secUsers') loadUsers();
     if (sec === 'secDash') loadStats();
+    if (sec === 'secWords') loadWords();
+    if (sec === 'secTrash') loadTrash();
   }));
 
   // ─── 状況 ───
@@ -359,6 +380,8 @@
           `${u.name ? escapeHtml(u.name) : '<span style="color:#BFB0A0">名前なし</span>'}</div>` +
           `<div class="meta">${escapeHtml(introText(u.intro))}</div>` +
           `<div class="meta">id ${u.id}　最終 ${fmtTime(u.last_seen)}</div>`;
+        const detail=document.createElement('button');detail.textContent='ユーザー詳細';
+        detail.onclick=()=>userDetails(u);info.append(detail);
         el.append(cv, info);
         $('userList').append(el);
       });
@@ -370,6 +393,55 @@
 
   const escapeHtml = (s) => s.replace(/[&<>"']/g,
     c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+
+  function confirmAction(title,body,label,cancel='キャンセル') {
+    return new Promise(resolve=>{
+      const dialog=$('confirmDialog');$('confirmTitle').textContent=title;
+      $('confirmBody').textContent=body;$('confirmProceed').textContent=label;
+      $('confirmCancel').textContent=cancel;
+      const finish=(yes)=>{dialog.oncancel=null;dialog.close();resolve(yes);};
+      $('confirmProceed').onclick=()=>finish(true);$('confirmCancel').onclick=()=>finish(false);
+      dialog.oncancel=(e)=>{e.preventDefault();finish(false);};dialog.showModal();
+    });
+  }
+  async function mutate(path,body,method='POST') {
+    const res=await api(path,{method,body:JSON.stringify(body)});
+    if(!res.ok)throw new Error(res.status===401?'管理者認証を確認してください':`操作できませんでした (${res.status})`);
+    return res;
+  }
+  async function userDetails(u) {
+    if(!await confirmAction('ユーザー詳細',`${u.name||'名前なし'}\n管理用ID: ${u.id}\n${introText(u.intro)}`,'ユーザーを削除','閉じる'))return;
+    while(await confirmAction('このユーザーを削除しますか？',u.name||'名前なし','削除へ進む')) {
+      if(!await confirmAction('本当に削除しますか？',`${u.name||'名前なし'}\n\n削除すると、このユーザーは直ちにアプリを利用できなくなります。\n30日以内であればゴミ箱から復元できます。\n30日後に完全削除されます。`,'ゴミ箱へ移動','戻る'))continue;
+      try{await mutate('user-actions',{user_id:u.id,action:'trash',confirmed:true});await loadUsers();}
+      catch(e){$('usersStatus').textContent=e.message;}break;
+    }
+  }
+  async function loadWords() {
+    try{const res=await api('words');if(!res.ok)throw new Error('取得できませんでした。管理者認証を確認してください');
+      const words=await res.json();$('wordList').replaceChildren();
+      for(const w of words){const li=document.createElement('li');li.append(document.createTextNode(w.word+' '));
+        const del=document.createElement('button');del.textContent='削除';del.onclick=async()=>{
+          del.disabled=true;try{await mutate('words',{id:w.id},'DELETE');await loadWords();}catch(e){$('wordsStatus').textContent=e.message;del.disabled=false;}};
+        li.append(del);$('wordList').append(li);}$('wordsStatus').textContent='';
+    }catch(e){$('wordsStatus').textContent=e.message;}
+  }
+  $('addWord').onclick=async()=>{const word=$('newWord').value.trim();if(!word)return;
+    $('addWord').disabled=true;try{await mutate('words',{word});$('newWord').value='';await loadWords();}
+    catch(e){$('wordsStatus').textContent=e.message;}finally{$('addWord').disabled=false;}};
+  async function loadTrash() {
+    try{const res=await api('trash');if(!res.ok)throw new Error('取得できませんでした。管理者認証を確認してください');
+      const list=await res.json();$('trashList').replaceChildren();
+      for(const u of list){const el=document.createElement('div');el.className='card';
+        const p=document.createElement('p');p.textContent=`${u.name||'名前なし'}\n管理用ID: ${u.id}\n削除: ${fmtTime(u.deleted_at)}\n完全削除予定: ${fmtTime(u.delete_after)}\n残り ${u.remaining_days} 日`;
+        const restore=document.createElement('button');restore.textContent='復元';restore.disabled=u.remaining_days<=0;
+        restore.onclick=async()=>{if(!await confirmAction('このユーザーを復元しますか？',`${u.name||'名前なし'}\n復元しても自動ログインされません。本人の再接続が必要です。`,'復元'))return;
+          restore.disabled=true;try{await mutate('user-actions',{user_id:u.id,action:'restore',confirmed:true});await loadTrash();}
+          catch(e){$('trashStatus').textContent=e.message;restore.disabled=false;}};
+        el.append(p,restore);$('trashList').append(el);}$('trashStatus').textContent=list.length?'':'ゴミ箱は空です';
+    }catch(e){$('trashStatus').textContent=e.message;}
+  }
 
   // ─── 配信 ───
   $('title').addEventListener('input', () => $('titleCount').textContent = $('title').value.length);

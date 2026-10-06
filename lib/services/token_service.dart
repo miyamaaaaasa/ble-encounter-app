@@ -6,11 +6,11 @@ import 'api_service.dart';
 /// BLEで流す使い捨てトークンを管理する。
 /// サーバー未接続時は永続PeerIdにフォールバックし、既存機能を維持する。
 class TokenService {
-  static const _store      = FlutterSecureStorage();
-  static const _keyToken   = 'ble_token_v1';
-  static const _keyExpiry  = 'ble_token_expiry_v1';
+  static const _store = FlutterSecureStorage();
+  static const _keyToken = 'ble_token_v1';
+  static const _keyExpiry = 'ble_token_expiry_v1';
 
-  static String?   _token;
+  static String? _token;
   static DateTime? _expiry;
 
   // 現在の有効なBLEトークン (hex 32文字 = 16バイト)
@@ -20,7 +20,8 @@ class TokenService {
   // BLEペイロード用バイト列 (16バイト)
   static List<int> get tokenBytes {
     final h = hexToken;
-    return List.generate(16, (i) => int.parse(h.substring(i * 2, i * 2 + 2), radix: 16));
+    return List.generate(
+        16, (i) => int.parse(h.substring(i * 2, i * 2 + 2), radix: 16));
   }
 
   static bool get _needsRefresh {
@@ -31,11 +32,18 @@ class TokenService {
   }
 
   static Future<void> init() async {
-    _token  = await _store.read(key: _keyToken);
+    _token = await _store.read(key: _keyToken);
     final e = await _store.read(key: _keyExpiry);
     if (e != null) _expiry = DateTime.tryParse(e);
 
     if (_needsRefresh) await refresh();
+  }
+
+  static Future<void> clear() async {
+    _token = null;
+    _expiry = null;
+    await _store.delete(key: _keyToken);
+    await _store.delete(key: _keyExpiry);
   }
 
   static Future<void> refresh() async {
@@ -44,10 +52,11 @@ class TokenService {
       debugPrint('[Token] refresh failed → using permanent PeerId');
       return;
     }
-    _token  = newToken;
+    _token = newToken;
     _expiry = DateTime.now().add(const Duration(hours: 24));
-    await _store.write(key: _keyToken,  value: _token);
+    await _store.write(key: _keyToken, value: _token);
     await _store.write(key: _keyExpiry, value: _expiry!.toIso8601String());
-    debugPrint('[Token] refreshed: ${_token!.substring(0, 8)}... expires $_expiry');
+    debugPrint(
+        '[Token] refreshed: ${_token!.substring(0, 8)}... expires $_expiry');
   }
 }

@@ -7,7 +7,7 @@ WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download 2>/dev/null || true
 
-COPY main.go ./
+COPY *.go ./
 RUN go mod tidy && \
     CGO_ENABLED=0 GOOS=linux go build \
       -trimpath -ldflags="-s -w" -o /out/api .

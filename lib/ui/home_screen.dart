@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/ble_providers.dart';
 import '../services/notification_service.dart';
@@ -84,6 +86,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     });
   }
 
+  void _selectTab(int i) {
+    if (i == 0 || i == 1) {
+      ref.read(appProvider.notifier).clearNewEncounterFlag();
+    }
+    setState(() => _selectedIndex = i);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,16 +101,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         index: _selectedIndex,
         children: _screens,
       ),
-      bottomNavigationBar: GameDock(
-        items: _dockItems,
-        selected: _selectedIndex,
-        onSelect: (i) {
-          if (i == 0 || i == 1) {
-            ref.read(appProvider.notifier).clearNewEncounterFlag();
-          }
-          setState(() => _selectedIndex = i);
-        },
-      ),
+      bottomNavigationBar: defaultTargetPlatform == TargetPlatform.iOS
+          ? CupertinoTabBar(
+              currentIndex: _selectedIndex,
+              onTap: _selectTab,
+              backgroundColor: Palette.card,
+              activeColor: Palette.sky,
+              inactiveColor: Palette.inkSoft,
+              items: _dockItems
+                  .map((item) => BottomNavigationBarItem(
+                        icon: item.custom ??
+                            Image.asset(item.asset!, width: 26, height: 26),
+                        label: item.label,
+                      ))
+                  .toList())
+          : GameDock(
+              items: _dockItems,
+              selected: _selectedIndex,
+              onSelect: _selectTab,
+            ),
     );
   }
 }

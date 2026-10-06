@@ -278,6 +278,13 @@ class AppNotifier extends Notifier<AppState> {
   // ─── Profile ─────────────────────────────────────────────────────────────
 
   Future<void> saveOwnProfile(OwnProfile profile) async {
+    if (!await ApiService.syncProfile(
+      displayName: profile.name, colorIndex: profile.colorIndex,
+      introStatus: profile.template.statusIndex, introHobbyCat: profile.template.hobbyCategory,
+      introHobbyDet: profile.template.hobbyDetail, introPhrase: profile.template.phraseIndex,
+    )) {
+      throw StateError(ApiService.profileError ?? '保存できませんでした。通信状況を確認してください');
+    }
     final isFirstSave = state.ownProfile == null;
     final withDate = profile.registeredAt != null
         ? profile

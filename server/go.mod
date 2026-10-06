@@ -2,7 +2,10 @@ module hajimemashite/api
 
 go 1.22
 
-require modernc.org/sqlite v1.34.5
+require (
+ modernc.org/sqlite v1.34.5
+ golang.org/x/text v0.21.0
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

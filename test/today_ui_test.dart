@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -158,6 +159,35 @@ void main() {
     await PeerId.init();
   });
   tearDown(() => Palette.night = false);
+
+  testWidgets('iOS retains all five screens in a Cupertino tab bar',
+      (tester) async {
+    final app = _App(const AppState(isLoading: false, isRunning: true));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      appProvider.overrideWith(() => app),
+      puzzleProvider.overrideWith(_Puzzle.new),
+      broadcastProvider.overrideWith((_) => _Broadcasts()),
+    ], child: const MaterialApp(home: HomeScreen())));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(CupertinoTabBar), findsOneWidget);
+    expect(find.byType(GameDock), findsNothing);
+    expect(
+        tester
+            .widget<CupertinoTabBar>(find.byType(CupertinoTabBar))
+            .items
+            .length,
+        5);
+    await tester.tap(find.text('図鑑').last);
+    await tester.pump();
+    expect(
+        tester
+            .widget<CupertinoTabBar>(find.byType(CupertinoTabBar))
+            .currentIndex,
+        3);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 12));
+  }, variant: TargetPlatformVariant({TargetPlatform.iOS}));
 
   testWidgets(
       'Both themes, narrow screens and enlarged text retain five tabs and revealed history',

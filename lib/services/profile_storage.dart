@@ -1,3 +1,4 @@
+import 'account_snapshot.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/own_profile.dart';
 import '../models/encounter_record.dart';
@@ -15,7 +16,9 @@ class ProfileStorage {
 
   Future<void> saveOwnProfile(OwnProfile profile) async {
     final prefs = await SharedPreferences.getInstance();
+    if (AccountSnapshot.locked) return;
     await prefs.setString(_ownProfileKey, profile.toStorageJson());
+    AccountSnapshot.changed();
   }
 
   Future<List<EncounterRecord>> loadEncounters() async {
@@ -31,6 +34,9 @@ class ProfileStorage {
 
   Future<void> saveEncounters(List<EncounterRecord> encounters) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_encountersKey, EncounterRecord.encodeList(encounters));
+    if (AccountSnapshot.locked) return;
+    await prefs.setString(
+        _encountersKey, EncounterRecord.encodeList(encounters));
+    AccountSnapshot.changed();
   }
 }

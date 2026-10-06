@@ -43,6 +43,11 @@ class OwnAvatarNotifier {
   static final instance = ValueNotifier<DotAvatar?>(null);
   static bool _loaded = false;
 
+  static void reload() {
+    _loaded = false;
+    ensureLoaded();
+  }
+
   static void ensureLoaded() {
     if (_loaded) return;
     _loaded = true;
@@ -76,7 +81,6 @@ class OwnAvatarNotifier {
       [t, t, t, t, t, y, y, y, y, y, y, t, t, t, t, t],
       [t, t, t, t, t, t, t, t, t, t, t, t, t, t, t, t],
     ];
-    return DotAvatar(
-        size: 16, pixels: [for (final r in rows) ...r]);
+    return DotAvatar(size: 16, pixels: [for (final r in rows) ...r]);
   }
 }

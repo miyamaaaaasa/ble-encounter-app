@@ -1,3 +1,94 @@
+# 最新状況 — 2026-10-07 / beta1.13.4+57
+
+## 起床後の確認
+
+日本語名・NGワード管理・2段階確認の管理者削除・30日間のゴミ箱・本人による明示的な再接続を実装し、バックアップ後に本番APIへ反映した。既存10ユーザーを保持。iOSは既存5画面をCupertinoTabBarへ変更し、正式タブアイコン／自作ドット絵を再利用する。
+
+### 変更と原因
+
+- 日本語を除去していたASCII専用入力処理を撤去。初回と編集の共通フォーム、上限10文字を維持。API応答はUTF-8バイトから復号し文字化けを防止。
+- アプリだけでは名前規制を回避できるため、サーバーがNGワードの部分一致を検証。NFKC・大小文字を統一。拒否表示は「この名前は使用できません」のみ。
+- 既存の匿名APIキーには管理者による失効／復元の仕組みがなかった。削除待ち状態・期限・失効キー・独立した再接続証明を追加。管理者復元後も旧キーを拒否し、本人の操作で新キーを発行する。
+- 履歴・カケラ・バッジ等は主に端末保存だったため、削除検知時の安全な隔離コピーと復元用アーカイブを追加。許可キーだけ圧縮してAES-256-GCM暗号化し、解読鍵は端末のSecureStorageに保持。サーバーは履歴の平文を保存しない。
+- サーバーの期限超過削除を1時間ごとの処理へ追加。他ユーザーの行・ローカル収集履歴を消さない。
+- iOSの下部UIをCupertinoTabBarに変更。AndroidのGameDockと既存5画面への導線は維持。
+
+### DB・API・画面・フロー
+
+詳細は [ACCOUNT_MANAGEMENT.md](ACCOUNT_MANAGEMENT.md)。usersへdeleted_at / delete_after / recovery_hash / archive、ng_words / revoked_keysと索引を追加する加算マイグレーション。旧データは削除しない。
+追加API: /admin/api/words、/admin/api/trash、/admin/api/user-actions、/v1/account/session、/v1/auth/reconnect。既存プロフィールAPIにサーバー名前検証を追加。
+管理画面にNGワード／ゴミ箱、ユーザー詳細に削除操作を追加。確認1→確認2→ゴミ箱→期限内に管理者確認付き復元→本人再接続。30日後はサーバー時刻で復元を拒否し定期的に完全削除する。
+
+### 検証
+
+- Flutter54テスト合格。既存の開門境界・0時・18時・カウント重複・5画面・オンボーディング・テーマ等を含む。
+- Go5テスト合格。日本語6例、NG部分一致／正規化、管理者権限、失効、復元、新キー、旧端末、期限ちょうど、他ユーザー保持を確認。
+- 管理画面の実HTML/JSをヘッドレスブラウザ＋ローカルmock APIで操作。複数NG追加／削除、確認1キャンセル、確認2前の未送信、ゴミ箱、確認付き復元が合格。モバイル幅430pxも確認。
+- 本番APIの専用QAユーザーで日本語の保存／トークン照合、NG拒否、非管理者拒否、30日差、旧キー拒否、新キーと復元コピー保持を確認。試験アカウント・NGワードを清掃し、本番ユーザー数は10→10、公開TLS health200。
+- 実機A202SH／Pixel 10エミュレータの5タブスモークQA合格。プロセス生存・収集ログに対象クラッシュ／例外なし。ライトのToday・広場、ダークのじぶん・ゲームを目視確認。
+- スクリーンショット差分QAは旧7タブ基準のためALERTあり（実機ゲーム45.63%、エミュレータ旧バッジ82.76%・旧設定85.31%等）。旧画像と現在の5タブを比較し、過去のUI変更・テーマ・データ差を確認。自動合格とは扱わず、5タブの固定条件ベースライン更新は残課題。
+- 静的解析: エラー0、既存の警告／info85件。既存警告の解消を完了扱いにしない。
+- Android署名付きrelease APK58.7MB成功。MacのiOS署名なしreleaseビルド27.8MB成功。
+- エミュレータの専用一時ユーザーで、初期設定→管理者削除→再起動で初回画面→管理者復元しても初回画面を維持→本人操作で再接続→AccountQAプロフィールとバッジの復元を確認。専用アカウントと一時OSユーザーは清掃済み。通常ユーザー0へ戻した。本番ユーザー数10、ゴミ箱0。
+- A202SHへデータ保持の更新インストール成功。versionCode57/versionName1.13.4、既存認証復元・Bluetooth周期・開門通知のログを確認。
+- 暗号化の往復、nonceの変化、改ざん・別所有者・誤った鍵の拒否を確認。
+- アセット監査: 参照欠損なし。将来用フォルダ未作成は既存のまま。
+
+### 残課題・制約
+
+- iOSの署名付き配布は未完了。SSHの署名はerrSecInternalComponentでキーチェーンに拒否された。GUI Terminalから `bash tool/ios_release.sh <device-id>` を実行する。検証時のiPhone/iPadはオフライン。
+- 自動署名のRunAtLoad LaunchAgent登録は、自動承認レビューが未承認の永続化として拒否した。登録していない。別経路で回避していない。
+- オフライン端末は削除状態を次の成功した通信で検知する。サーバーは削除直後から拒否する。
+- 匿名の再接続証明・暗号鍵を端末から失うと本人の再接続はできない。復元は自動ログインではない。
+- 1MiBを超える圧縮暗号化データは保存できない。大規模履歴の分割同期は将来課題。
+- 本体DB完全削除と世代バックアップ消去は別。既存の日次7世代・手動分を含む最大14ローカル世代／30日外部暗号化コピーの保持を維持。古いDBからの災害復旧時は削除履歴照合が必要。
+- iOS背景検出の実証、端末別QA、既存Kotlin/Swift Package Manager移行警告は次回候補。BLEの駆動間隔・開門判定・ゲーム機能は今回変更していない。
+
+### 変更ファイル
+
+- `ACCOUNT_MANAGEMENT.md`
+- `CHANGELOG.md`
+- `IOS_PLAN.md`
+- `PROMPT_GUIDE.md`
+- `REPORT.md`
+- `ROADMAP.md`
+- `WORKFLOW.md`
+- `lib/app.dart`
+- `lib/models/dot_avatar.dart`
+- `lib/providers/ble_providers.dart`
+- `lib/services/account_cipher.dart`
+- `lib/services/account_snapshot.dart`
+- `lib/services/api_service.dart`
+- `lib/services/badge_service.dart`
+- `lib/services/game_storage.dart`
+- `lib/services/notification_service.dart`
+- `lib/services/piece_storage.dart`
+- `lib/services/profile_storage.dart`
+- `lib/services/token_service.dart`
+- `lib/ui/account_access_gate.dart`
+- `lib/ui/home_screen.dart`
+- `lib/ui/profile_screen.dart`
+- `lib/ui/widgets/user_icon.dart`
+- `pubspec.lock`
+- `pubspec.yaml`
+- `server/Dockerfile`
+- `server/README.md`
+- `server/accounts.go`
+- `server/accounts_test.go`
+- `server/admin_panel/admin/index.html`
+- `server/admin_panel/privacy/index.html`
+- `server/deploy.sh`
+- `server/go.mod`
+- `server/go.sum`
+- `server/main.go`
+- `test/account_cipher_test.dart`
+- `test/account_lifecycle_test.dart`
+- `test/today_ui_test.dart`
+- `tool/ios_release.sh`
+- `tool/obsidian_sync.py`
+
+以下は過去の更新記録。
+
 # 最新状況 — 2026-10-06 / beta1.13.3+56
 
 ## 初回チュートリアル「はじめての散歩」

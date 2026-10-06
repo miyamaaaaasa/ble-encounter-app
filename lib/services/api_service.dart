@@ -1,4 +1,8 @@
 import 'dart:convert';
+import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'account_snapshot.dart';
+import 'account_cipher.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -16,10 +20,20 @@ class ApiService {
   ApiService._();
 
   static const _store = FlutterSecureStorage();
+  @visibleForTesting
+  static http.Client client = http.Client();
   static const _keyApiKey = 'api_key_v1';
   static const _keyUserId = 'api_user_id_v1';
   static const _timeout = Duration(seconds: 12);
 
+  static final accountBlocked = ValueNotifier<bool>(false);
+  static const blockedKey = 'account_blocked_v1';
+  static const recoveryKey = 'account_recovery_v1';
+  static const resetPendingKey = 'account_reset_pending_v1';
+  static const quarantineKey = 'account_quarantine_v1';
+  static const archiveSecretKey = 'account_archive_secret_v1';
+  static String? _lastSnapshot;
+  static bool _syncingAccount = false;
   static String? _apiKey;
   static String? _userId;
 
@@ -37,6 +51,12 @@ class ApiService {
   static Future<void> init() => _initFuture ??= _init();
 
   static Future<void> _init() async {
+    accountBlocked.value =
+        (await SharedPreferences.getInstance()).getBool(blockedKey) ?? false;
+    if (accountBlocked.value) {
+      AccountSnapshot.locked = true;
+      return;
+    }
     if (await _restore()) {
       debugPrint('[Api] restored uid=${_userId!.substring(0, 8)}');
       return;
@@ -62,16 +82,17 @@ class ApiService {
 
   static Future<bool> _doSignUp() async {
     // 直前に別経路が登録を終えていれば、それを使い回して新規作成しない
+    if (accountBlocked.value) return false;
     if (isReady || await _restore()) return true;
     try {
-      final res = await http
+      final res = await client
           .post(Uri.parse('$apiBaseUrl/auth/anon'))
           .timeout(_timeout);
-      if (res.statusCode != 200) {
+      if (!_accepted(res)) {
         debugPrint('[Api] signup failed: ${res.statusCode}');
         return false;
       }
-      final m = jsonDecode(res.body) as Map<String, dynamic>;
+      final m = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
       final key = m['api_key'] as String?;
       final uid = m['user_id'] as String?;
       if (key == null || uid == null) {
@@ -92,6 +113,7 @@ class ApiService {
 
   /// 未登録なら登録を試みる（オフライン起動後の自己回復）
   static Future<bool> _ready() async {
+    if (accountBlocked.value) return false;
     if (isReady) return true;
     return _signUpAnonymously();
   }
@@ -101,20 +123,129 @@ class ApiService {
         'Content-Type': 'application/json; charset=utf-8',
       };
 
+  static bool _accepted(http.Response res) {
+    if (res.statusCode == 403 || res.statusCode == 401) {
+      try {
+        if (const {
+          'account_inactive',
+          'unauthorized'
+        }.contains((jsonDecode(utf8.decode(res.bodyBytes)) as Map)['error'])) {
+          AccountSnapshot.locked = true;
+          accountBlocked.value = true;
+        }
+      } catch (_) {}
+    }
+    return res.statusCode == 200 && !accountBlocked.value;
+  }
+
+  /// Check session on foreground entry; upload only changed compressed data.
+  static Future<void> checkAccount() async {
+    await init();
+    if (accountBlocked.value || !await _ready() || _syncingAccount) return;
+    _syncingAccount = true;
+    try {
+      var recovery = await _store.read(key: recoveryKey);
+      if (recovery == null) {
+        final rng = Random.secure();
+        recovery = List.generate(
+                32, (_) => rng.nextInt(256).toRadixString(16).padLeft(2, '0'))
+            .join();
+      }
+      final archive = await AccountSnapshot.capture();
+      var secret = await _store.read(key: archiveSecretKey);
+      if (secret == null) {
+        secret = await AccountCipher.newKey();
+        await _store.write(key: archiveSecretKey, value: secret);
+      }
+      final encrypted = archive != _lastSnapshot
+          ? await AccountCipher.encrypt(archive, secret, _userId!)
+          : null;
+      final res = await client
+          .post(Uri.parse('$apiBaseUrl/account/session'),
+              headers: _headers,
+              body: jsonEncode({
+                'recovery_key': recovery,
+                if (encrypted != null) 'archive': encrypted
+              }))
+          .timeout(_timeout);
+      if (_accepted(res)) {
+        await _store.write(key: recoveryKey, value: recovery);
+        _lastSnapshot = archive;
+      }
+    } catch (_) {/* Offline never implies deletion. */} finally {
+      _syncingAccount = false;
+    }
+  }
+
+  /// Non-login proof and encrypted quarantine are kept separately from the revoked session.
+  static Future<void> releaseBlockedAccount() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(blockedKey, true);
+    await prefs.setBool(resetPendingKey, true);
+    // Legacy anonymous accounts use their existing device proof only to request
+    // a NEW session explicitly. The old bearer key stays permanently revoked.
+    final legacyProof = _apiKey ?? await _store.read(key: _keyApiKey);
+    if (await _store.read(key: recoveryKey) == null && legacyProof != null) {
+      await _store.write(key: recoveryKey, value: legacyProof);
+    }
+    if (prefs.getString('own_profile_v1') != null ||
+        await _store.read(key: quarantineKey) == null) {
+      await _store.write(
+          key: quarantineKey, value: await AccountSnapshot.capture());
+    }
+    await _store.delete(key: _keyApiKey);
+    await _store.delete(key: _keyUserId);
+    _apiKey = null;
+    _userId = null;
+    _lastSnapshot = null;
+  }
+
+  static Future<bool> reconnectAccount() async {
+    final recovery = await _store.read(key: recoveryKey);
+    if (recovery == null) return false;
+    final res = await client
+        .post(Uri.parse('$apiBaseUrl/auth/reconnect'),
+            headers: {'Content-Type': 'application/json; charset=utf-8'},
+            body: jsonEncode({'recovery_key': recovery}))
+        .timeout(_timeout);
+    if (res.statusCode != 200) return false;
+    final m = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    final local = await _store.read(key: quarantineKey);
+    final secret = await _store.read(key: archiveSecretKey);
+    final cloud = m['archive'] as String;
+    final archive = local ??
+        (cloud.isEmpty
+            ? ''
+            : await AccountCipher.decrypt(
+                cloud, secret!, m['user_id'] as String));
+    await AccountSnapshot.restore(archive);
+    await _store.write(key: _keyApiKey, value: m['api_key'] as String);
+    await _store.write(key: _keyUserId, value: m['user_id'] as String);
+    _apiKey = m['api_key'] as String;
+    _userId = m['user_id'] as String;
+    await (await SharedPreferences.getInstance()).remove(blockedKey);
+    await _store.delete(key: quarantineKey);
+    _initFuture = Future.value();
+    AccountSnapshot.locked = false;
+    accountBlocked.value = false;
+    return true;
+  }
+
   // ─── Token ───────────────────────────────────────────────────────
 
   /// BLEで流す使い捨てトークンを発行（24時間有効）
   static Future<String?> issueToken() async {
     if (!await _ready()) return null;
     try {
-      final res = await http
+      final res = await client
           .post(Uri.parse('$apiBaseUrl/tokens/issue'), headers: _headers)
           .timeout(_timeout);
-      if (res.statusCode != 200) {
+      if (!_accepted(res)) {
         debugPrint('[Api] issueToken: ${res.statusCode}');
         return null;
       }
-      return (jsonDecode(res.body) as Map<String, dynamic>)['token'] as String?;
+      return (jsonDecode(utf8.decode(res.bodyBytes))
+          as Map<String, dynamic>)['token'] as String?;
     } catch (e) {
       debugPrint('[Api] issueToken: $e');
       return null;
@@ -129,15 +260,16 @@ class ApiService {
     if (tokens.isEmpty) return [];
     if (!await _ready()) return null;
     try {
-      final res = await http
+      final res = await client
           .post(Uri.parse('$apiBaseUrl/tokens/resolve'),
               headers: _headers, body: jsonEncode({'tokens': tokens}))
           .timeout(_timeout);
-      if (res.statusCode != 200) {
+      if (!_accepted(res)) {
         debugPrint('[Api] resolveTokens: ${res.statusCode}');
         return null;
       }
-      return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+      return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+          .cast<Map<String, dynamic>>();
     } catch (e) {
       debugPrint('[Api] resolveTokens: $e');
       return null;
@@ -153,21 +285,23 @@ class ApiService {
   /// [sinceId] より新しいものだけが返るので、端末側は最後に読んだIDを保持する。
   /// 通信エラー時は null（呼び出し側が既読IDを進めないようにするため、
   /// 成功して0件の [] とは区別する）。
-  static Future<List<Map<String, dynamic>>?> fetchBroadcasts(int sinceId) async {
+  static Future<List<Map<String, dynamic>>?> fetchBroadcasts(
+      int sinceId) async {
     // 起動直後は init() がまだ完了しておらず isReady が false になり得る。
     // そこで諦めると次のポーリング（2分後）まで何も出ず、配信直後に
     // アプリを開いた利用者に届かない。他APIと同様に準備完了を待つ。
     if (!await _ready()) return null;
     try {
-      final res = await http
+      final res = await client
           .get(Uri.parse('$apiBaseUrl/broadcasts?since=$sinceId'),
               headers: _headers)
           .timeout(_timeout);
-      if (res.statusCode != 200) {
+      if (!_accepted(res)) {
         debugPrint('[Api] fetchBroadcasts: ${res.statusCode}');
         return null;
       }
-      return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+      return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+          .cast<Map<String, dynamic>>();
     } catch (e) {
       debugPrint('[Api] fetchBroadcasts: $e');
       return null;
@@ -188,14 +322,15 @@ class ApiService {
   static Future<List<Map<String, dynamic>>?> fetchMutualEncounters() async {
     if (!await _ready()) return null;
     try {
-      final res = await http
+      final res = await client
           .get(Uri.parse('$apiBaseUrl/encounters/mutual'), headers: _headers)
           .timeout(_timeout);
-      if (res.statusCode != 200) {
+      if (!_accepted(res)) {
         debugPrint('[Api] fetchMutual: ${res.statusCode}');
         return null;
       }
-      return (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+      return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
+          .cast<Map<String, dynamic>>();
     } catch (e) {
       debugPrint('[Api] fetchMutual: $e');
       return null;
@@ -206,6 +341,7 @@ class ApiService {
 
   /// 表示名・色・ドット絵・バッジレベルをサーバーへ同期。
   /// ドット絵はサーバー側で4bit/pxに圧縮され128バイトで保存される。
+  static String? profileError;
   static Future<bool> syncProfile({
     required String displayName,
     required int colorIndex,
@@ -218,9 +354,13 @@ class ApiService {
     int? introHobbyDet,
     int? introPhrase,
   }) async {
-    if (!await _ready()) return false;
+    profileError = null;
+    if (!await _ready()) {
+      profileError = '通信状況を確認してください';
+      return false;
+    }
     try {
-      final res = await http
+      final res = await client
           .post(Uri.parse('$apiBaseUrl/profile'),
               headers: _headers,
               body: jsonEncode({
@@ -234,8 +374,14 @@ class ApiService {
                 if (introPhrase != null) 'intro_phrase': introPhrase,
               }))
           .timeout(_timeout);
-      return res.statusCode == 200;
+      if (res.statusCode == 422) {
+        profileError = 'この名前は使用できません';
+      } else if (res.statusCode != 200) {
+        profileError = '保存できませんでした。通信状況を確認してください';
+      }
+      return _accepted(res);
     } catch (e) {
+      profileError = '保存できませんでした。通信状況を確認してください';
       debugPrint('[Api] syncProfile: $e');
       return false;
     }
@@ -248,10 +394,10 @@ class ApiService {
   static Future<bool> deleteAccount() async {
     if (!isReady) return true; // 未登録なら消すものが無い
     try {
-      final res = await http
+      final res = await client
           .delete(Uri.parse('$apiBaseUrl/account'), headers: _headers)
           .timeout(_timeout);
-      if (res.statusCode != 200) {
+      if (!_accepted(res)) {
         debugPrint('[Api] deleteAccount: ${res.statusCode}');
         return false;
       }
@@ -272,11 +418,11 @@ class ApiService {
   static Future<bool> savePieceData(List<int> pixels) async {
     if (!await _ready()) return false;
     try {
-      final res = await http
+      final res = await client
           .post(Uri.parse('$apiBaseUrl/profile'),
               headers: _headers, body: jsonEncode({'piece_data': pixels}))
           .timeout(_timeout);
-      return res.statusCode == 200;
+      return _accepted(res);
     } catch (e) {
       debugPrint('[Api] savePieceData: $e');
       return false;

@@ -1,3 +1,4 @@
+import 'account_snapshot.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_badge.dart';
 
@@ -8,12 +9,18 @@ class BadgeService {
     final prefs = await SharedPreferences.getInstance();
     final json = prefs.getString(_key);
     if (json == null) return [];
-    try { return AppBadge.decodeList(json); } catch (_) { return []; }
+    try {
+      return AppBadge.decodeList(json);
+    } catch (_) {
+      return [];
+    }
   }
 
   static Future<void> save(List<AppBadge> badges) async {
     final prefs = await SharedPreferences.getInstance();
+    if (AccountSnapshot.locked) return;
     await prefs.setString(_key, AppBadge.encodeList(badges));
+    AccountSnapshot.changed();
   }
 
   // 初回プロフィール設定時のスタートバッジを付与
@@ -48,7 +55,7 @@ class BadgeService {
   // 達成済みマイルストーンの一覧を返す
   static List<int> _milestonesUpTo(int total) {
     final result = <int>[];
-    if (total >= 1)  result.add(1);
+    if (total >= 1) result.add(1);
     if (total >= 10) result.add(10);
     if (total >= 50) result.add(50);
     // 100単位

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/dot_avatar.dart';
 import '../models/own_profile.dart';
@@ -9,9 +8,6 @@ import 'avatar_editor_screen.dart';
 import 'encounter_helpers.dart';
 import 'theme/palette.dart';
 import 'widgets/ui_kit.dart';
-
-final _asciiFormatter =
-    FilteringTextInputFormatter.allow(RegExp(r'[\x20-\x7E]'));
 
 const _prefectureNames = [
   '北海道',
@@ -63,8 +59,6 @@ const _prefectureNames = [
   '沖縄',
 ];
 
-String _stripNonAscii(String s) => s.replaceAll(RegExp(r'[^\x20-\x7E]'), '');
-
 class ProfileScreen extends ConsumerStatefulWidget {
   final bool isFirstLaunch;
   const ProfileScreen({super.key, this.isFirstLaunch = false});
@@ -78,6 +72,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late int _colorIndex;
   late TemplateMessage _template;
   int _prefecture = -1;
+  bool _saving = false;
   DotAvatar? _dotAvatar;
 
   @override
@@ -101,13 +96,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _sanitizeName() {
-    final filtered = _stripNonAscii(_nameCtrl.text);
-    if (filtered != _nameCtrl.text) {
-      _nameCtrl.value = TextEditingValue(
-        text: filtered,
-        selection: TextSelection.collapsed(offset: filtered.length),
-      );
-    }
     setState(() {});
   }
 
@@ -122,6 +110,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     _sanitizeName();
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
@@ -130,17 +119,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
       return;
     }
+    setState(() => _saving = true);
     final existing = ref.read(appProvider).ownProfile;
-    await ref.read(appProvider.notifier).saveOwnProfile(
-          OwnProfile(
-            name: name,
-            colorIndex: _colorIndex,
-            prefecture: _prefecture,
-            template: _template,
-            registeredAt: existing?.registeredAt,
-          ),
-        );
-    if (!widget.isFirstLaunch && context.mounted) {
+    try {
+      await ref.read(appProvider.notifier).saveOwnProfile(
+            OwnProfile(
+              name: name,
+              colorIndex: _colorIndex,
+              prefecture: _prefecture,
+              template: _template,
+              registeredAt: existing?.registeredAt,
+            ),
+          );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.toString().contains('この名前は使用できません')
+                ? 'この名前は使用できません'
+                : '保存できませんでした。通信状況を確認してください')));
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+    if (!widget.isFirstLaunch && mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('保存しました')));
     }
@@ -221,11 +223,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               TextField(
                 controller: _nameCtrl,
                 maxLength: 10,
-                keyboardType: TextInputType.emailAddress,
-                inputFormatters: [_asciiFormatter],
+                keyboardType: TextInputType.name,
                 decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'English only · max 10 chars',
+                  labelText: '名前',
+                  hintText: 'そら、山田太郎、そら123など・10文字まで',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.person_outline),
                 ),
@@ -431,7 +432,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ],
               const SizedBox(height: 36),
               FilledButton.icon(
-                onPressed: _save,
+                onPressed: _saving ? null : _save,
                 icon: Icon(
                     widget.isFirstLaunch ? Icons.arrow_forward : Icons.check),
                 label: Text(widget.isFirstLaunch ? 'はじめる' : '保存'),
@@ -441,7 +442,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               if (widget.isFirstLaunch) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Your name and template message are shared with nearby people.\nEnglish name only. Anonymous OK.',
+                  '名前と選んだ自己紹介が、すれ違った相手に届きます。\n本名・連絡先は必要ありません。',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall

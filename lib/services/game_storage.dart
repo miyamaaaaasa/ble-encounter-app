@@ -1,13 +1,14 @@
+import 'account_snapshot.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game_data.dart';
 
 class GameStorage {
-  static const _keyData   = 'game_data_v1';
-  static const _keyDate   = 'game_today_date';
+  static const _keyData = 'game_data_v1';
+  static const _keyDate = 'game_today_date';
   // 今日分の一時的な処理済みセット（日付リセット対象）
   static const _keyTodayPiece = 'game_today_piece';
-  static const _keyTodayFish  = 'game_today_fish';
+  static const _keyTodayFish = 'game_today_fish';
 
   static Future<GameData> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -22,7 +23,9 @@ class GameStorage {
 
   static Future<void> save(GameData data) async {
     final prefs = await SharedPreferences.getInstance();
+    if (AccountSnapshot.locked) return;
     await prefs.setString(_keyData, jsonEncode(data.toJson()));
+    AccountSnapshot.changed();
   }
 
   // 今日ピースを贈ったpeerIdセット（日跨ぎでリセット）
@@ -30,7 +33,9 @@ class GameStorage {
     final prefs = await SharedPreferences.getInstance();
     final today = _todayKey();
     if (prefs.getString(_keyDate) != today) {
+      if (AccountSnapshot.locked) return {};
       await prefs.setString(_keyDate, today);
+      AccountSnapshot.changed();
       await prefs.remove(_keyTodayPiece);
       await prefs.remove(_keyTodayFish);
       return {};
@@ -42,14 +47,18 @@ class GameStorage {
 
   static Future<void> saveTodayPiece(Set<String> peerIds) async {
     final prefs = await SharedPreferences.getInstance();
+    if (AccountSnapshot.locked) return;
     await prefs.setString(_keyTodayPiece, jsonEncode(peerIds.toList()));
+    AccountSnapshot.changed();
   }
 
   static Future<Set<String>> loadTodayFish() async {
     final prefs = await SharedPreferences.getInstance();
     final today = _todayKey();
     if (prefs.getString(_keyDate) != today) {
+      if (AccountSnapshot.locked) return {};
       await prefs.setString(_keyDate, today);
+      AccountSnapshot.changed();
       await prefs.remove(_keyTodayPiece);
       await prefs.remove(_keyTodayFish);
       return {};
@@ -61,7 +70,9 @@ class GameStorage {
 
   static Future<void> saveTodayFish(Set<String> peerIds) async {
     final prefs = await SharedPreferences.getInstance();
+    if (AccountSnapshot.locked) return;
     await prefs.setString(_keyTodayFish, jsonEncode(peerIds.toList()));
+    AccountSnapshot.changed();
   }
 
   static String _todayKey() {

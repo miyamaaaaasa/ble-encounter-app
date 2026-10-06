@@ -1,3 +1,4 @@
+import '../services/account_snapshot.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,7 +78,9 @@ class DotAvatarStorage {
 
   static Future<void> save(DotAvatar avatar) async {
     final prefs = await SharedPreferences.getInstance();
+    if (AccountSnapshot.locked) return;
     await prefs.setString(_key, jsonEncode(avatar.toMap()));
+    AccountSnapshot.changed();
   }
 }
 
