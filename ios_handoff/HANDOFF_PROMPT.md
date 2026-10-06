@@ -1,4 +1,19 @@
-# iOS すれ違い通信アプリ 引き継ぎドキュメント
+# iOS引き継ぎの現行案内 — 2026-10-07
+
+現行はbeta1.13.4+57。下記はbeta1.2時代の資料であり、そのまま実装に使わない。
+サーバー不使用・永続UUID広告・即時通知の古い記述は現行仕様ではない。
+現在は自前Go/SQLite API、匿名認証、回転BLEトークン、GATT、気配・開門、5タブを使用する。
+日本語名・NGワード・30日ゴミ箱と手動再接続もAndroid/iOSの共通コードに実装済み。
+
+現行の引き継ぎは `IOS_PLAN.md`、`ACCOUNT_MANAGEMENT.md`、`REPORT.md`、`design/world-ui/REQUIREMENTS.md` とリポジトリの実ソースを読む。
+Macの検証用ソースは `~/development/ble-encounter-codex-accounts` に配置済み。元の `~/development/ble-encounter-app` の署名変更は保護している。
+CupertinoTabBarの5画面・既存アイコンを保持し、署名なしreleaseビルドは成功した。署名付き実機版は未完了。
+GUI Terminalで `bash tool/ios_release.sh <device-id>` を実行する。SSH署名失敗を、iOSコードのコンパイル失敗と混同しない。
+LaunchAgentの登録は自動承認レビューに拒否され、登録していない。
+
+---
+
+# 過去資料: iOS すれ違い通信アプリ 引き継ぎドキュメント
 ## Android 版との相互通信を実現する iOS アプリの開発
 
 ---
