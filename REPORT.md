@@ -36,6 +36,8 @@
 
 ### 残課題・制約
 
+- GitHub: `c54497f`で実装・テスト・運用資料、`3ffadf9`で古いiOS資料を履歴と明示する案内を保存・push。追加変更ファイルは `ios_handoff/HANDOFF_PROMPT.md` と `ios_handoff/SOURCE_BUNDLE.md`。
+- Obsidian: 指定保管庫へ25資料と会話・作業記録を更新。新しい管理仕様ノートのDrive登録は確認できたが、最後の追記までのPush完了は未確認。標準CLIは無効。デバッグポート付き起動は情報露出を理由に自動承認レビューに拒否され、通常起動の既存autoPushだけを利用した。
 - iOSの署名付き配布は未完了。SSHの署名はerrSecInternalComponentでキーチェーンに拒否された。GUI Terminalから `bash tool/ios_release.sh <device-id>` を実行する。検証時のiPhone/iPadはオフライン。
 - 自動署名のRunAtLoad LaunchAgent登録は、自動承認レビューが未承認の永続化として拒否した。登録していない。別経路で回避していない。
 - オフライン端末は削除状態を次の成功した通信で検知する。サーバーは削除直後から拒否する。
