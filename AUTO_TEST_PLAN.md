@@ -63,7 +63,7 @@ adb shell am start -n jp.hajimemashite.app/.MainActivity
 ### R3: 初回体験（エミュ推奨・約5分）
 ```
 adb uninstall jp.hajimemashite.app → install → 起動
-# → オンボ9ページ→プロフィール→権限2種→ホーム到達をスクショ列で確認
+# → オンボ5ページ→プロフィール→既存のOS権限フロー→ホーム到達をスクショ列で確認
 ```
 
 ### R4: ダーク回帰（自動+AI読解・約4分）
