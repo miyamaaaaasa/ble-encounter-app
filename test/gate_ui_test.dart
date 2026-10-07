@@ -45,7 +45,7 @@ void main() {
         expect(find.textContaining('08:37'), findsNothing);
         expect(find.text('スキップ'), findsNothing);
         if (count == 0)
-          expect(find.text('今回はだれもいなかったみたい'), findsOneWidget);
+          expect(find.text('今日はのんびりみたい。'), findsOneWidget);
         else
           expect(find.text('$count人'), findsOneWidget);
         await tester.pumpWidget(const SizedBox());

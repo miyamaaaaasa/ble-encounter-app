@@ -1,4 +1,59 @@
-# 最新状況 — 2026-10-07 / beta1.13.4+57
+# 最新状況 — 2026-10-08 / beta1.13.5+58
+
+## そらぴ正式導入の結果
+
+提供された正式素材を既存画面へ統合。5ページのチュートリアル、今日の門待ち、広場、開門結果、図鑑Empty、カケラのEmpty／読み込み、ゲームの案内に登場する。Androidの夕暮れLauncher／AdaptiveとiOSのAppIconを反映。そらぴを遭遇人数・履歴・図鑑ユーザーに加えていない。
+
+### 調査・実装内容
+
+- 既存の画面・5タブ・背景／門／ユーザー表示・初回完了フラグ・再閲覧・権限処理を確認して再利用。BLE、遭遇判定、API、DB、通知、アカウント、日本語名／NGワード／ゴミ箱を変更していない。
+- チュートリアルの案内役を正式そらぴへ変更。歓迎→歩行→門を待つ→初対面／再会を案内→夜の送り出し。相手の見本は既存デフォルト絵／シルエットのまま。時刻は既存gateHoursを参照する。
+- Todayは通常の門待ち、開門5分前の考えるポーズ、BLE停止時の困るポーズ。人数を知らなくても表示できる状態だけで選ぶ。
+- 結果は0人なら「今日はのんびりみたい。」＋座る、1人以上喜ぶ、再会で手を振る、10人以上で小さなジャンプ。既存紙吹雪などと共存。文字SEは追加しない。
+- 提供シートから18枚の透明PNGへ個別化。合計348,263bytes（約340KiB）。大きな原本は実行時に読み込まず、他デザインを生成していない。
+- 歩行5フレーム・待機差分・数pxの移動を使用。静止ポーズはTimerなし。非表示タブ・背景・別route・スクロール画面外・動き抑制設定で停止し、disposeで解除。
+- 完成済み夕暮れアイコン原本からAndroid5density・Adaptive、iOS各サイズを生成。Adaptive16%inset、円形マスクと実際のPixel Launcherで主要2キャラクターが切れないことを確認。iOS1024pxは不透明RGB。
+- アイコン生成ツールがiOSの無関係なYES設定をAppIconへ書き換えたため、2箇所とも元へ戻した。最終project.pbxproj差分はなし。
+- アセット監査がDartの動的画像パスを文字通りの欠損と誤判定していたため、既存ツールを素材ファミリーの実ファイル照合へ修正。
+
+### 主な変更ファイル
+
+- `lib/ui/widgets/sorapi.dart`: 共通の案内役・軽量アニメーション・停止制御。
+- `lib/ui/onboarding_screen.dart`: 5ページの正式案内役。
+- `lib/ui/today_screen.dart`／`widgets/plaza_scene.dart`／`gate_reveal_screen.dart`: 門・広場・結果の状態別表示。
+- `lib/ui/community_tabs.dart`／`puzzle/puzzle_board_screen.dart`: 図鑑Empty・ゲーム・カケラの案内。
+- `lib/ui/home_screen.dart`: 既存IndexedStackに非選択タブのTickerMode停止を追加。既存導線は保持。
+- `assets/mascot/sorapi/`／`assets/branding/`／`design/sorapi/`: 正式素材、原本と切り出し記録。
+- `android/app/src/main/res/`／`ios/Runner/Assets.xcassets/AppIcon.appiconset/`／`pubspec.yaml`: Launcher・Adaptive・iOS画像とversion1.13.5+58。
+- `test/sorapi_test.dart`／`test/gate_ui_test.dart`: 停止制御の確認・0人の文言更新。
+- `tool/prepare_sorapi.py`／`tool/asset_audit.py`／`tool/obsidian_sync.py`: 素材準備・監査・Obsidian資料登録。
+- `design/sorapi/README.md`／`design/onboarding/README.md`／`IOS_PLAN.md`／`ROADMAP.md`／`CHANGELOG.md`／本書: 現況・検証・TODOを更新。
+
+### 検証結果
+
+- Flutter **55テスト合格**。0時／18時／重複・保存・アカウント管理・5タブ・5ページ・スワイプ／スキップ／完了フラグ・文字2倍・両テーマ、結果0/1/8/24人・私的な名前／ID／遭遇時刻を結果に出さない確認を含む。
+- そらぴの歩行フレーム切替、非表示タブで停止、OS動き抑制で停止、Widget破棄後の例外なしを追加確認。
+- 静的解析 **エラー0、既存警告／info85件**。今回追加Widgetの非推奨呼び出しは解消。
+- Android署名付きrelease APK **59.2MB**。最終素材で再ビルドしPixel 10へデータ保持の更新インストール。
+- Pixel 10の5タブスモークQA合格。versionName1.13.5、生存確認、収集した対象クラッシュ／Flutter例外ログ0。
+- ライトToday／広場、ダークの5タブ、両テーマのチュートリアル全5ページを巡回。文字・操作の隠れ／観測したオーバーフローなし。再閲覧終了後は設定へ戻り既存Pixel10QAプロフィール保持。再閲覧時にOS権限画面へ移行しないことを確認。
+- アセット欠損0。iOS Contentsの全参照ファイル、1024px形式、18スプライト128×144pxを検査。
+- 記録: `qa_out/sorapi-tests-final.txt`、`sorapi-analyze-final.txt`、`sorapi-build-final.txt`、`sorapi-assets.txt`、`qa_out/sorapi-final/`。画像はローカルQA記録でGit対象外。
+
+### 残課題・今回未確認
+
+- 実機は接続されておらず、Android実機／BLE相互通信・背景検出／通知の今回のE2Eは未確認。既存ロジックを維持したが、実機合格とは扱わない。
+- MacへTailscale SSHがtimeout。iOS画像反映済みだが今回のビルド・署名・iPhone／iPad表示は未確認。前版のiOSビルド成功と混同しない。
+- 既存UI祝福の`_celebrated`はメモリ内のみ。**再起動をまたいだ再演出抑止は未実装**。今回保存ロジックを変えず、UI既読の永続化は残課題。全要件完了とは報告しない。
+- 「3時間インターバル」と現行BLE2分／自動解析3分には仕様差がある。今回のために周期を変更していない。
+- 石造りの開閉門・分割昼夕夜背景は旧版からの正式素材TODO。歩いて登場してから手を振る連続演出、ランダム行動、専用の睡眠／発見イベントは今回追加していない。
+- Obsidianへ更新資料を同期する。Google DriveのPush実行・最終クラウド同期完了は確認できるまで未確認扱い。
+
+詳細正本: [design/sorapi/README.md](design/sorapi/README.md)。次回はMacと実機の確認、既読UI保存、正式門アセットの順を推奨する。
+
+---
+
+# 過去の結果 — 2026-10-07 / beta1.13.4+57
 
 ## 起床後の確認
 

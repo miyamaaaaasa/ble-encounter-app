@@ -1,7 +1,7 @@
 name: ble_encounter
 description: BLEすれ違い検知アプリ
 publish_to: 'none'
-version: 1.13.4+57
+version: 1.13.5+58
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -62,10 +62,11 @@ dev_dependencies:
 # アプリアイコン生成（flutter pub run flutter_launcher_icons）
 flutter_launcher_icons:
   android: true
-  ios: false
-  image_path: "assets/icons/tab_today.png"
-  adaptive_icon_background: "#FBF3E4"
-  adaptive_icon_foreground: "assets/icons/tab_today.png"
+  ios: true
+  image_path: "assets/branding/app_icon.png"
+  remove_alpha_ios: true
+  adaptive_icon_background: "#EFA262"
+  adaptive_icon_foreground: "assets/branding/app_icon.png"
   adaptive_icon_foreground_inset: 16
 
 flutter:
@@ -75,3 +76,4 @@ flutter:
     - assets/icons/
     - assets/gate/
     - assets/today/
+    - assets/mascot/sorapi/

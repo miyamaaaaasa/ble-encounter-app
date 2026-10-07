@@ -13,6 +13,7 @@ import 'theme/palette.dart';
 import 'widgets/peer_icon.dart';
 import 'widgets/pixel_world.dart';
 import 'widgets/ui_kit.dart';
+import 'widgets/sorapi.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
@@ -236,7 +237,26 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                 child: Padding(
                     padding: const EdgeInsets.fromLTRB(36, 40, 36, 24),
                     child: Column(children: [
-                      const PixelDoor(),
+                      SizedBox(
+                          height: 180,
+                          child: Stack(alignment: Alignment.center, children: [
+                            const PixelDoor(),
+                            Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: IgnorePointer(
+                                    child: Sorapi(
+                                        size: 68,
+                                        mood: !state.isRunning
+                                            ? SorapiMood.trouble
+                                            : !canOpen &&
+                                                    gate
+                                                            .difference(now)
+                                                            .inMinutes <=
+                                                        5
+                                                ? SorapiMood.think
+                                                : SorapiMood.wait))),
+                          ])),
                       const SizedBox(height: 24),
                       PixelPanel(
                           child: Column(children: [

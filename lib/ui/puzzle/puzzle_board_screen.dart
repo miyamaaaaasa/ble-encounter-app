@@ -1,3 +1,4 @@
+import '../widgets/sorapi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/piece_data.dart';
@@ -157,7 +158,10 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
             // ─── カケラグリッド ─────────────────────────────────
             Expanded(
               child: pieces.isEmpty
-                  ? _emptyState()
+                  ? (puzzle.isResolving
+                      ? const Center(
+                          child: Sorapi(mood: SorapiMood.walk, size: 72))
+                      : _emptyState())
                   : GridView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                       gridDelegate:
@@ -225,7 +229,7 @@ class _PuzzleBoardScreenState extends ConsumerState<PuzzleBoardScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.grid_view_outlined, size: 72, color: Colors.white12),
+          const Sorapi(mood: SorapiMood.think, size: 72),
           const SizedBox(height: 16),
           const Text('まだカケラがありません',
               style: TextStyle(color: Colors.white38, fontSize: 15)),

@@ -33,6 +33,7 @@ DEST = VAULT / "projects" / "ble-encounter-app"
 
 # リポジトリ内のドキュメント → vault内での表示名
 DOCS = {
+    "design/sorapi/README.md": "そらぴ正式導入・アイコン・検証",
     "ACCOUNT_MANAGEMENT.md": "日本語名・NGワード・アカウント管理",
     "design/onboarding/README.md": "初回チュートリアルUI実装",
     "design/onboarding/REQUIREMENTS.md": "初回チュートリアルUI要件",

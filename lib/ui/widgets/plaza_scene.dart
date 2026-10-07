@@ -4,6 +4,7 @@ import '../../models/encounter_record.dart';
 import '../theme/palette.dart';
 import 'peer_icon.dart';
 import 'pixel_world.dart';
+import 'sorapi.dart';
 import 'ui_kit.dart';
 import 'user_icon.dart';
 
@@ -175,6 +176,12 @@ class _PlazaSceneState extends State<PlazaScene>
                             ),
                           );
                         }),
+
+                        const Positioned(
+                            right: 6,
+                            bottom: 16,
+                            child: IgnorePointer(
+                                child: Sorapi(size: 62, mood: SorapiMood.sit))),
 
                         // じぶん（中央手前）
                         AnimatedBuilder(

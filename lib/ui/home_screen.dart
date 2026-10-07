@@ -99,7 +99,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       backgroundColor: Palette.cream,
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: List.generate(
+            _screens.length,
+            (i) =>
+                TickerMode(enabled: i == _selectedIndex, child: _screens[i])),
       ),
       bottomNavigationBar: defaultTargetPlatform == TargetPlatform.iOS
           ? CupertinoTabBar(

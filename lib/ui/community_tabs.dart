@@ -16,6 +16,7 @@ import 'widgets/peer_icon.dart';
 import 'widgets/pixel_world.dart';
 import 'widgets/ui_kit.dart';
 import 'widgets/user_icon.dart';
+import 'widgets/sorapi.dart';
 
 /// Existing full screens remain reachable with their original state/actions.
 void openCommunityScreen(BuildContext context, Widget screen) {
@@ -91,8 +92,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
             child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: PixelPanel(
-                    child: Text('まだ空いているページです。\n開門して出会った人を集めよう。',
-                        style: Ts.body))))
+                    child: Column(children: [
+                  const Sorapi(mood: SorapiMood.book, size: 72),
+                  Text('まだ空いているページです。\n開門して出会った人を集めよう。', style: Ts.body)
+                ]))))
       else
         SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -175,8 +178,7 @@ class GameCollectionScreen extends ConsumerWidget {
                     const SizedBox(height: 20),
                     PixelPanel(
                         child: Column(children: [
-                      Image.asset('assets/icons/nav_game.png',
-                          width: 64, height: 64),
+                      const Sorapi(mood: SorapiMood.happy, size: 64),
                       const SizedBox(height: 12),
                       Text('ゲームセンター', style: Ts.title),
                       const SizedBox(height: 8),

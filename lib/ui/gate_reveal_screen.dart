@@ -11,6 +11,7 @@ import 'encounter_helpers.dart';
 import 'theme/palette.dart';
 import 'widgets/peer_icon.dart';
 import 'widgets/pixel_world.dart';
+import 'widgets/sorapi.dart';
 
 class GateRevealScreen extends StatefulWidget {
   final List<EncounterRecord> encounters;
@@ -174,7 +175,17 @@ class _GateRevealScreenState extends State<GateRevealScreen>
                                             : 'スキップ',
                                         style: Ts.title))),
                             if (!_done) ...[
-                              const SizedBox(height: 40),
+                              const SizedBox(height: 16),
+                              Sorapi(
+                                  size: 64,
+                                  mood: opening
+                                      ? SorapiMood.wait
+                                      : people.isEmpty
+                                          ? SorapiMood.sit
+                                          : people[index].meetCount > 1
+                                              ? SorapiMood.wave
+                                              : SorapiMood.happy),
+                              const SizedBox(height: 16),
                               if (opening) ...[
                                 PixelDoor(open: (ms / 1800).clamp(0, 1)),
                                 const SizedBox(height: 28),
@@ -273,7 +284,7 @@ class EncounterResultCard extends StatelessWidget {
                   child: Column(children: [
                 Text('きょう', style: Ts.title),
                 if (people.isEmpty)
-                  Text('今回はだれもいなかったみたい',
+                  Text('今日はのんびりみたい。',
                       style: Ts.title, textAlign: TextAlign.center)
                 else ...[
                   Text('${people.length}人',
@@ -284,7 +295,18 @@ class EncounterResultCard extends StatelessWidget {
                   Text('と出会いました！', style: Ts.title),
                 ],
               ])),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              Sorapi(
+                  size: 72,
+                  animate: true,
+                  mood: people.isEmpty
+                      ? SorapiMood.sit
+                      : people.length >= 10
+                          ? SorapiMood.jump
+                          : people.any((e) => e.meetCount > 1)
+                              ? SorapiMood.wave
+                              : SorapiMood.happy),
+              const SizedBox(height: 16),
               Wrap(
                   alignment: WrapAlignment.center,
                   spacing: 8,

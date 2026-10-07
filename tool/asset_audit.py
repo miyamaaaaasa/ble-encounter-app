@@ -8,6 +8,7 @@
 終了コード: 0=問題なし / 1=欠損あり（ビルドは通るが実行時に絵が出ない）
 """
 import re
+import fnmatch
 import sys
 from pathlib import Path
 
@@ -36,6 +37,16 @@ def main() -> int:
     pub = (ROOT / "pubspec.yaml").read_text(encoding="utf-8")
     declared = re.findall(r"^\s+-\s+(assets/[^\s]+)\s*$", pub, re.M)
 
+    # Dart interpolation refers to an asset family, not a literal '$' filename.
+    for ref in list(refs):
+        if '$' not in ref:
+            continue
+        pattern = re.sub(r'\$\{[^}]+\}|\$\w+', '*', ref)
+        matches = [d for d in disk if fnmatch.fnmatchcase(d, pattern)]
+        if matches:
+            sources = refs.pop(ref)
+            for match in matches:
+                refs.setdefault(match, []).extend(sources)
     missing = sorted(r for r in refs if r not in disk)
     unused = sorted(d for d in disk if d not in refs
                     and not any(d.startswith(x.rstrip("/") + "/") is False for x in [])  # keep simple

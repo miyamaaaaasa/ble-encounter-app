@@ -6,6 +6,7 @@ import '../services/notification_service.dart';
 import 'theme/palette.dart';
 import 'widgets/pixel_world.dart';
 import 'widgets/user_icon.dart';
+import 'widgets/sorapi.dart';
 
 /// UI only. The caller still owns initial setup and OS permissions.
 class OnboardingScreen extends StatefulWidget {
@@ -42,7 +43,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     'さあ、広場を\nはじめましょう',
   ];
   static const _stories = [
-    'ここは、日常ですれ違った\n誰かの気配が集まる、小さな広場です。',
+    'ぼくはそらぴ。この広場の案内役だよ。\n日常で届いた気配が集まる広場へ、ようこそ。',
     '日常の中ですれ違うと、\nその人の気配が きょうの広場に届きます。',
     '1日に3回、門がひらきます。\nその時間までに届いた気配と出会えます。',
     '門をあけると、\nいろいろな出会いが待っています。',
@@ -263,6 +264,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _scene(int page, bool reduced) {
     if (page == 3) {
       return Column(children: [
+        Sorapi(
+            mood: SorapiMood.wave,
+            size: 64,
+            animate: page == _page && !reduced),
         Row(children: [
           Expanded(
               child: Column(children: [
@@ -352,8 +357,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           reduced ? 0 : math.sin(_life.value * math.pi) * 5,
                           reduced ? 0 : -_life.value * 3),
                       child: child),
-                  child: const UserIcon(
-                      size: 76, background: Colors.transparent))),
+                  child: Sorapi(
+                      size: 84,
+                      animate: page == _page && !reduced,
+                      mood: switch (page) {
+                        0 => SorapiMood.wave,
+                        1 => SorapiMood.walk,
+                        2 => SorapiMood.wait,
+                        _ => SorapiMood.wave,
+                      }))),
         ]));
   }
 
