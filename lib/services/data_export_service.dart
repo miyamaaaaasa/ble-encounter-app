@@ -39,7 +39,7 @@ class DataExportService {
 
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'application/json')],
-      subject: 'はじめましてこんにちは バックアップデータ',
+      subject: 'sure. バックアップデータ',
     );
     debugPrint('[Export] exported ${encounters.length} encounters, ${badges.length} badges');
   }

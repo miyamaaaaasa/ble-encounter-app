@@ -36,7 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   bool _saving = false;
   String? _error;
   static const _titles = [
-    'ようこそ\nきょうの広場へ',
+    'ようこそ\nsure.へ',
     'すれ違うと、\n気配が届く',
     '時間になったら\n門をあける',
     'はじめまして と\nまた会えた！',
@@ -44,7 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   ];
   static const _stories = [
     'ぼくはそらぴ。この広場の案内役だよ。\n日常で届いた気配が集まる広場へ、ようこそ。',
-    '日常の中ですれ違うと、\nその人の気配が きょうの広場に届きます。',
+    '日常の中ですれ違うと、\nその人の気配が sure.に届きます。',
     '1日に3回、門がひらきます。\nその時間までに届いた気配と出会えます。',
     '門をあけると、\nいろいろな出会いが待っています。',
     '近くにいる誰かの気配を受け取るために、\nBluetoothを使います。',
@@ -113,7 +113,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       padding: const EdgeInsets.fromLTRB(20, 8, 12, 0),
                       child: Row(children: [
                         const Expanded(
-                            child: Text('きょうの広場 / はじめての散歩',
+                            child: Text('sure. / はじめての散歩',
                                 style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,

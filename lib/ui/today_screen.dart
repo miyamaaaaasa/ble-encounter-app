@@ -190,7 +190,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                 child: ColoredBox(
                     color: Palette.cream.withValues(alpha: .94),
                     child: ScreenHeader(
-                        title: 'きょうの広場',
+                        title: 'sure.',
                         asset: 'assets/icons/nav_today.png',
                         trailing: state.isRunning
                             ? null

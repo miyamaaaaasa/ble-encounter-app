@@ -1,4 +1,61 @@
-# 最新状況 — 2026-10-08 / beta1.13.5+58
+# 最新状況 — 2026-10-14 / sure. / beta1.13.6+59
+
+## 正式名称反映
+
+正式ブランドを **sure.**（シュア、小文字＋末尾ピリオド）へ反映。キャッチコピー「今日、誰とすれ違った？」をBRAND.mdへ記録。既存デザイン・画面遷移・データ・機能は維持。外部登録／ストア公開／リリースタグ／本番サーバー反映は行っていない。
+
+### 洗い出しと変更ファイル
+
+| ファイル | 変更内容 |
+|---|---|
+| lib/app.dart | MaterialAppのユーザー向けタイトル |
+| lib/ui/today_screen.dart | ホーム見出し |
+| lib/ui/onboarding_screen.dart | 歓迎タイトル、上部名称、気配の説明の名称3箇所 |
+| lib/ui/settings_screen.dart | PackageInfo取得失敗時の表示名 |
+| lib/ui/gate_reveal_screen.dart | 結果／共有カードのアプリ署名 |
+| lib/services/data_export_service.dart | バックアップの共有件名のみ |
+| android/app/src/main/AndroidManifest.xml | applicationのlabelのみ |
+| ios/Runner/Info.plist | CFBundleDisplayNameのみ |
+| server/admin_panel/admin/index.html | 管理画面のtitle／見出し／説明。ローカルソースのみ |
+| server/admin_panel/privacy/index.html | ポリシーのtitle／アプリ名／footer。ローカルソースのみ |
+| test/onboarding_ui_test.dart | 歓迎文の期待値を更新 |
+| pubspec.yaml | 1.13.6+59へ更新。betaの表示方針を維持 |
+| BRAND.md（新規） | 名称・読み・コピー・変更範囲と今後の正本 |
+| CLAUDE.md / PROMPT_GUIDE.md / README.md | 今後の名称方針・プロジェクト案内 |
+| WORKFLOW.md / ROADMAP.md / IOS_PLAN.md / CHANGELOG.md / REPORT.md | 現行名称／版数・検証・未確認を更新 |
+| tool/obsidian_sync.py | ブランド資料の登録と生成ハブ名称。保存先の名前は維持 |
+
+### あえて変更しなかった箇所
+
+- applicationId／Bundle ID `jp.hajimemashite.app`、Dart package `ble_encounter`、CFBundleName `ble_encounter`、署名・Firebase・認証・API・DB識別子、フォルダ名はそのまま。
+- バックアップJSONの`appName: ble_encounter`と`hello_backup_`ファイル名を維持。過去データの読み込みを壊さない。共有件名だけを変更した。
+- バッジ「はじめましてこんにちは」は既存の実績名として保持。保存済み実績を移行・改名していない。
+- 地名ではなくゲーム内の場所／機能を意味する「広場」「広場をはじめる」などは維持。旧仮称が残るコードコメントは実行表示ではないので対象外。
+- マスコットの素材／名前／動作はそのまま。ご指定「すれぴ」に対しコードには「そらぴ」があるため、自動改名せず呼称の食い違いを確認事項とした。
+- 過去のCHANGELOG／要件文書／参考画像は当時の記録として残す。新しい開発ではBRAND.mdを正とする。
+- ストア説明文・掲載画像とブランドデザインの調整は次回指定のため未変更。商標調査・外部サービス登録・公開は未実行。
+
+### 検証結果
+
+- Flutter55件成功。改訂したオンボーディング文字列と両テーマ／文字拡大／完了保存・再閲覧、既存回帰テストを含む。
+- 静的解析エラー0、既存警告／info85件。
+- Android署名付きrelease APK59.2MBのビルド成功。
+- APKメタデータを直接検査し `application-label: sure.`、package `jp.hajimemashite.app`、versionName1.13.6、versionCode59を確認。
+- iOS plistは従来値にCFBundleDisplayName変更だけを加えた内容と一致。AndroidManifestもlabel変更だけ、バックアップサービスも共有件名以外は一致することを検査。
+- BLE／遭遇／アカウント／モデル／サーバー処理／Xcodeプロジェクトの差分なし。
+- ログ: qa_out/brand-tests.txt、brand-analyze.txt、brand-build.txt。
+
+### 残確認
+
+- Android実機は未接続。端末上のホームアイコン名称、最近使ったアプリのタイトル等は今回未確認。
+- MacのTailscale SSHがタイムアウト。今回のiOSビルドとiPhone／iPadのホーム表示は未確認。
+- 管理・ポリシーHTMLは本番未反映。公開反映は商標確認・公開方針に合わせて別途行う。
+- マスコットの既存呼称の食い違い、商標最終確認、ストア説明／ブランドデザインは残課題。
+- Obsidianへ今回の資料・会話・履歴を記録する。Google Driveの明示Push／クラウド完了は未確認。
+
+---
+
+# 過去の結果 — 2026-10-08 / beta1.13.5+58
 
 ## そらぴ正式導入の結果
 

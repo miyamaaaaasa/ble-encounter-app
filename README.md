@@ -1,4 +1,8 @@
-# ble_encounter_app
+# sure.（シュア）
+
+今日、誰とすれ違った？
+
+正式名称・内部識別子の維持方針: [BRAND.md](BRAND.md)。
 
 A new Flutter project.
 

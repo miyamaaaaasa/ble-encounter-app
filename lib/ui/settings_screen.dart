@@ -40,7 +40,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       info = await PackageInfo.fromPlatform();
     } catch (_) {
       info = PackageInfo(
-          appName: 'はじめましてこんにちは',
+          appName: 'sure.',
           packageName: '',
           version: '1.5.14',
           buildNumber: '21');

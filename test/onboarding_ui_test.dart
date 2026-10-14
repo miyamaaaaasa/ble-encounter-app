@@ -91,7 +91,7 @@ void main() {
     await t.pump();
     await t.pump(const Duration(seconds: 1));
     await t.pump();
-    expect(find.text('ようこそ\nきょうの広場へ').hitTestable(), findsOneWidget);
+    expect(find.text('ようこそ\nsure.へ').hitTestable(), findsOneWidget);
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
   });

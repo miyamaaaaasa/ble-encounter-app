@@ -1,6 +1,10 @@
 # iOS版 — 現況と検証計画
 
-最終更新: 2026-10-08 / 現行: beta1.13.5+58
+最終更新: 2026-10-14 / 現行: beta1.13.6+59
+
+## 2026-10-14 正式名称sure.
+
+CFBundleDisplayNameだけをsure.へ変更。CFBundleName／Bundle ID／署名設定は維持。今回もMacへのSSHがタイムアウトし、ビルド／実機Launcher表示は未確認。ブランド仕様はBRAND.md。
 
 ## 2026-10-08 そらぴ・正式アイコン
 

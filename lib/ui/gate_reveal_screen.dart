@@ -345,7 +345,7 @@ class EncounterResultCard extends StatelessWidget {
               const SizedBox(height: 16),
               PixelPanel(
                   padding: const EdgeInsets.all(8),
-                  child: Text('${fmtDate(date)}\nはじめましてこんにちは',
+                  child: Text('${fmtDate(date)}\nsure.',
                       style: Ts.caption, textAlign: TextAlign.center)),
             ])));
   }

@@ -27,7 +27,7 @@ class App extends ConsumerWidget {
 
     return MaterialApp(
       key: ValueKey(Palette.night), // モード切替で全体を再構築
-      title: 'はじめましてこんにちは',
+      title: 'sure.',
       debugShowCheckedModeBanner: false,
       theme: _buildTheme(false),
       darkTheme: _buildTheme(true),

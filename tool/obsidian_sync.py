@@ -33,6 +33,7 @@ DEST = VAULT / "projects" / "ble-encounter-app"
 
 # リポジトリ内のドキュメント → vault内での表示名
 DOCS = {
+    "BRAND.md": "sure.正式名称・変更範囲",
     "design/sorapi/README.md": "そらぴ正式導入・アイコン・検証",
     "ACCOUNT_MANAGEMENT.md": "日本語名・NGワード・アカウント管理",
     "design/onboarding/README.md": "初回チュートリアルUI実装",
@@ -135,8 +136,8 @@ def sync_index(synced: list[str]):
     tools = sh("git ls-files tool/*").splitlines()
     loc = sh('git ls-files "lib/*.dart" "lib/**/*.dart"').splitlines()
     body = [
-        fm("BLE Encounter App", ["ble-encounter-app", "project", "moc"]),
-        "# はじめましてこんにちは（BLE Encounter App）\n",
+        fm("sure.", ["ble-encounter-app", "project", "moc"]),
+        "# sure.（シュア）\n",
         "> Bluetoothですれ違った人との出会いを楽しむコミュニティゲーム\n",
         f"**現行バージョン:** {version()}　**最終同期:** {stamp()}\n",
         "## クイックリンク\n",
