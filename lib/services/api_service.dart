@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:http/io_client.dart';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'account_snapshot.dart';
@@ -20,8 +23,24 @@ class ApiService {
   ApiService._();
 
   static const _store = FlutterSecureStorage();
+  static final _defaultClient = http.Client();
   @visibleForTesting
-  static http.Client client = http.Client();
+  static http.Client client = _defaultClient;
+  static Future<void>? _transport;
+
+  static Future<void> _prepareTransport() {
+    if (!identical(client, _defaultClient)) return Future.value();
+    return _transport ??= () async {
+      final ca = await rootBundle.load('assets/certificates/isrgrootx1.pem');
+      // Android 7 lacks this public root. Keep normal chain/hostname validation.
+      final context = SecurityContext(withTrustedRoots: true)
+        ..setTrustedCertificatesBytes(
+            ca.buffer.asUint8List(ca.offsetInBytes, ca.lengthInBytes));
+      client = IOClient(HttpClient(context: context));
+      _defaultClient.close();
+    }();
+  }
+
   static const _keyApiKey = 'api_key_v1';
   static const _keyUserId = 'api_user_id_v1';
   static const _timeout = Duration(seconds: 12);
@@ -53,6 +72,7 @@ class ApiService {
   static Future<void> init() => _initFuture ??= _init();
 
   static Future<void> _init() async {
+    await _prepareTransport();
     final prefs = await SharedPreferences.getInstance();
     selfDeleted = prefs.getBool(deletedKey) ?? false;
     accountBlocked.value = selfDeleted || (prefs.getBool(blockedKey) ?? false);
@@ -84,6 +104,7 @@ class ApiService {
       _signUpFuture ??= _doSignUp().whenComplete(() => _signUpFuture = null);
 
   static Future<bool> _doSignUp() async {
+    await _prepareTransport();
     // 直前に別経路が登録を終えていれば、それを使い回して新規作成しない
     if (accountBlocked.value) return false;
     if (isReady || await _restore()) return true;
@@ -117,6 +138,7 @@ class ApiService {
   /// 未登録なら登録を試みる（オフライン起動後の自己回復）
   static Future<bool> _ready() async {
     if (accountBlocked.value || selfDeleted) return false;
+    await _prepareTransport();
     if (isReady) return true;
     return _signUpAnonymously();
   }

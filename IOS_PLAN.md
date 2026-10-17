@@ -51,3 +51,7 @@ MacのGUI Terminalで `cd ~/development/ble-encounter-codex-accounts && bash too
 - 現在の運用コマンドや依存バージョンはリポジトリの `README.md` / `pubspec.yaml` とGitHub Actions設定を確認する。
 
 関連: [iOS引き継ぎプロンプト](ios_handoff/HANDOFF_PROMPT.md) / [iOSソース資料](ios_handoff/SOURCE_BUNDLE.md) / [ROADMAP.md](ROADMAP.md)
+
+## 2026-10-17 RCレビュー
+
+Mac SSHはtimeoutのためビルド・署名・実機は未確認。背景広告の条件が明示停止を上書きし、stopForegroundServiceもno-opである。削除後/停止後の再広告防止、ネイティブトークン期限、保存前に消える背景キューを優先確認する。現在iOSの公開合格とはしない。詳細: [RELEASE_CANDIDATE.md](RELEASE_CANDIDATE.md)。

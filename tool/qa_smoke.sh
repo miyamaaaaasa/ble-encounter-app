@@ -19,7 +19,8 @@ echo "== QA smoke on $SERIAL =="
 
 # 1) 最新APKをインストール（存在すれば）
 if [ -f "$APK" ]; then
-  A install -r "$APK" >/dev/null 2>&1 && echo "installed" || echo "install skipped (signature/err)"
+  timeout 120 adb -s "$SERIAL" install --no-streaming -r "$APK" > "$OUT/install.txt" 2>&1 || { echo "NG: install failed; see $OUT/install.txt"; exit 1; }
+  echo "installed"
 fi
 
 # 1.5) バージョン照合ゲート:
@@ -29,7 +30,7 @@ GOT=$(A shell dumpsys package jp.hajimemashite.app 2>/dev/null \
       | grep -o 'versionName=[0-9.]*' | head -1 | cut -d= -f2)
 if [ -n "$WANT" ] && [ "$WANT" != "$GOT" ]; then
   echo "NG: VERSION MISMATCH device=$GOT expected=$WANT"
-  echo "    (署名不一致の可能性。adb uninstall 後に再実行してください)"
+  echo "    (署名不一致の可能性。既存データを保持し、更新失敗の原因を確認してください)"
   exit 1
 fi
 echo "version on device: $GOT ✓"
@@ -40,6 +41,13 @@ A shell am force-stop jp.hajimemashite.app
 A shell am start -n jp.hajimemashite.app/.MainActivity >/dev/null
 sleep 6
 
+# A live process behind a locked screen is not a UI test.
+foreground() {
+  A shell dumpsys window windows 2>/dev/null | tr -d '\r' \
+    | grep -Eq 'mCurrentFocus=.*jp\.hajimemashite\.app/.*MainActivity'
+}
+foreground || { echo "NG: unlock device and open sure.; no taps sent"; exit 1; }
+
 # 3) 解像度から比率座標を計算（GameDock: 下端マージン内の5等分）
 SIZE=$(A shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1)
 W=${SIZE%x*}; H=${SIZE#*x}
@@ -48,14 +56,18 @@ TABS=(today plaza game catalog self)
 for i in "${!TABS[@]}"; do
   X=$(( W * (2*i + 1) / 10 ))   # (i+0.5)/5 * W
   alive || { echo "NG: device lost mid-run"; exit 1; }
+  foreground || { echo "NG: app is no longer in foreground; no taps sent"; exit 1; }
   A shell input tap "$X" "$DOCK_Y"
   sleep 2
   A exec-out screencap -p > "$OUT/tab_${TABS[$i]}.png" 2>/dev/null
+  foreground || { echo "NG: app lost foreground after tap"; exit 1; }
+  PNG=$(head -c 8 "$OUT/tab_${TABS[$i]}.png" | od -An -tx1 | tr -d ' \n')
+  [ "$PNG" = "89504e470d0a1a0a" ] || { echo "NG: invalid screenshot"; exit 1; }
   echo "  shot: tab_${TABS[$i]}.png"
 done
 
 # 4) クラッシュ・エラー抽出
-A logcat -d 2>/dev/null | grep -E "FATAL EXCEPTION|AndroidRuntime: |flutter : .*(Exception|error|Error)" \
+A logcat -d 2>/dev/null | grep -E "FATAL EXCEPTION|[EF] AndroidRuntime:|flutter : .*(Exception|error|Error)" \
   | grep -v "server unreachable" > "$OUT/errors.txt" || true
 
 # 5) プロセス生存確認（クラッシュ即死検出）
