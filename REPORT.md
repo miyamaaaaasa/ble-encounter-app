@@ -19,6 +19,8 @@ Flutter71件・Go9件合格、go vet成功、govulncheckとPub119依存の照会
 
 同期で再出現した旧コード76件をSHA-256記録付きで親フォルダへ退避。ソースや固有データは削除していない。未追跡のiOS CIファイルは本変更へ含めない。
 
+Git: `17e8279`をmainへpushし、GitHubの参照との一致を確認。Obsidianは指定のH:ドライブが現在存在せず同期失敗。資料と作業ログは`qa_out/obsidian-pending/`へ保存し、H:復帰後の記録待ちとする。Google DriveへのPush完了は未確認。
+
 ---
 
 # 過去のRC検証 — beta1.13.8+61 / 2026-10-17
