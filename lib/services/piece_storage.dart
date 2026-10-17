@@ -56,6 +56,14 @@ class PuzzlePieceStorage {
 /// ゲート解析前の「収集したが未解析のトークン」をローカルに保存
 class PendingScanStorage {
   static const _key = 'pending_scans_v1';
+  static Future<void> _writes = Future.value();
+
+  // BLE callbacks can overlap; serialize the entire read/modify/write.
+  static Future<void> _write(Future<void> Function() action) {
+    final next = _writes.then((_) => action());
+    _writes = next.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return next;
+  }
 
   static Future<List<_PendingScan>> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -71,19 +79,20 @@ class PendingScanStorage {
     }
   }
 
-  static Future<void> add(String token, DateTime at) async {
-    final existing = await load();
-    if (existing.any((s) => s.token == token)) return; // 重複スキップ
-    // 仕様: ユーザーが開門して確認するまで時間経過では削除しない。
-    // （削除はサーバー解析成功時の removeTokens のみ。容量保護の上限だけ設ける）
-    final all = [...existing, _PendingScan(token: token, at: at)];
-    final trimmed = all.length > 2000 ? all.sublist(all.length - 2000) : all;
-    final prefs = await SharedPreferences.getInstance();
-    if (AccountSnapshot.locked) return;
-    await prefs.setString(
-        _key, jsonEncode(trimmed.map((s) => s.toMap()).toList()));
-    AccountSnapshot.changed();
-  }
+  static Future<void> add(String token, DateTime at) => _write(() async {
+        final existing = await load();
+        if (existing.any((s) => s.token == token)) return; // 重複スキップ
+        // 仕様: ユーザーが開門して確認するまで時間経過では削除しない。
+        // （削除はサーバー解析成功時の removeTokens のみ。容量保護の上限だけ設ける）
+        final all = [...existing, _PendingScan(token: token, at: at)];
+        final trimmed =
+            all.length > 2000 ? all.sublist(all.length - 2000) : all;
+        final prefs = await SharedPreferences.getInstance();
+        if (AccountSnapshot.locked) return;
+        await prefs.setString(
+            _key, jsonEncode(trimmed.map((s) => s.toMap()).toList()));
+        AccountSnapshot.changed();
+      });
 
   static Future<List<String>> getAllTokens() async {
     final list = await load();
@@ -96,15 +105,16 @@ class PendingScanStorage {
     return s?.at;
   }
 
-  static Future<void> removeTokens(List<String> tokens) async {
-    final existing = await load();
-    final updated = existing.where((s) => !tokens.contains(s.token)).toList();
-    final prefs = await SharedPreferences.getInstance();
-    if (AccountSnapshot.locked) return;
-    await prefs.setString(
-        _key, jsonEncode(updated.map((s) => s.toMap()).toList()));
-    AccountSnapshot.changed();
-  }
+  static Future<void> removeTokens(List<String> tokens) => _write(() async {
+        final existing = await load();
+        final updated =
+            existing.where((s) => !tokens.contains(s.token)).toList();
+        final prefs = await SharedPreferences.getInstance();
+        if (AccountSnapshot.locked) return;
+        await prefs.setString(
+            _key, jsonEncode(updated.map((s) => s.toMap()).toList()));
+        AccountSnapshot.changed();
+      });
 
   static Future<int> get pendingCount async => (await load()).length;
 }

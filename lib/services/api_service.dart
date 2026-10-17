@@ -28,6 +28,8 @@ class ApiService {
 
   static final accountBlocked = ValueNotifier<bool>(false);
   static const blockedKey = 'account_blocked_v1';
+  static const deletedKey = 'account_deleted_v1';
+  static bool selfDeleted = false;
   static const recoveryKey = 'account_recovery_v1';
   static const resetPendingKey = 'account_reset_pending_v1';
   static const quarantineKey = 'account_quarantine_v1';
@@ -51,8 +53,9 @@ class ApiService {
   static Future<void> init() => _initFuture ??= _init();
 
   static Future<void> _init() async {
-    accountBlocked.value =
-        (await SharedPreferences.getInstance()).getBool(blockedKey) ?? false;
+    final prefs = await SharedPreferences.getInstance();
+    selfDeleted = prefs.getBool(deletedKey) ?? false;
+    accountBlocked.value = selfDeleted || (prefs.getBool(blockedKey) ?? false);
     if (accountBlocked.value) {
       AccountSnapshot.locked = true;
       return;
@@ -113,7 +116,7 @@ class ApiService {
 
   /// 未登録なら登録を試みる（オフライン起動後の自己回復）
   static Future<bool> _ready() async {
-    if (accountBlocked.value) return false;
+    if (accountBlocked.value || selfDeleted) return false;
     if (isReady) return true;
     return _signUpAnonymously();
   }
@@ -182,6 +185,21 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(blockedKey, true);
     await prefs.setBool(resetPendingKey, true);
+    if (selfDeleted) {
+      for (final key in [
+        _keyApiKey,
+        _keyUserId,
+        recoveryKey,
+        quarantineKey,
+        archiveSecretKey
+      ]) {
+        await _store.delete(key: key);
+      }
+      _apiKey = null;
+      _userId = null;
+      _lastSnapshot = null;
+      return;
+    }
     // Legacy anonymous accounts use their existing device proof only to request
     // a NEW session explicitly. The old bearer key stays permanently revoked.
     final legacyProof = _apiKey ?? await _store.read(key: _keyApiKey);
@@ -198,6 +216,18 @@ class ApiService {
     _apiKey = null;
     _userId = null;
     _lastSnapshot = null;
+  }
+
+  /// Explicitly begin again only after an irreversible self-deletion.
+  static Future<void> beginNewAccount() async {
+    if (!selfDeleted) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(deletedKey);
+    await prefs.remove(blockedKey);
+    selfDeleted = false;
+    _initFuture = null;
+    AccountSnapshot.locked = false;
+    accountBlocked.value = false;
   }
 
   static Future<bool> reconnectAccount() async {
@@ -260,16 +290,22 @@ class ApiService {
     if (tokens.isEmpty) return [];
     if (!await _ready()) return null;
     try {
-      final res = await client
-          .post(Uri.parse('$apiBaseUrl/tokens/resolve'),
-              headers: _headers, body: jsonEncode({'tokens': tokens}))
-          .timeout(_timeout);
-      if (!_accepted(res)) {
-        debugPrint('[Api] resolveTokens: ${res.statusCode}');
-        return null;
+      final resolved = <Map<String, dynamic>>[];
+      // The server accepts at most 200 tokens; never discard an unprocessed tail.
+      for (var offset = 0; offset < tokens.length; offset += 200) {
+        final batch = tokens.sublist(offset, min(offset + 200, tokens.length));
+        final res = await client
+            .post(Uri.parse('$apiBaseUrl/tokens/resolve'),
+                headers: _headers, body: jsonEncode({'tokens': batch}))
+            .timeout(_timeout);
+        if (!_accepted(res)) {
+          debugPrint('[Api] resolveTokens: ${res.statusCode}');
+          return null;
+        }
+        resolved.addAll((jsonDecode(utf8.decode(res.bodyBytes)) as List)
+            .cast<Map<String, dynamic>>());
       }
-      return (jsonDecode(utf8.decode(res.bodyBytes)) as List)
-          .cast<Map<String, dynamic>>();
+      return resolved;
     } catch (e) {
       debugPrint('[Api] resolveTokens: $e');
       return null;
@@ -389,10 +425,10 @@ class ApiService {
 
   /// サーバー上の自分のデータを完全に削除する（Google Playのデータ削除要件）。
   ///
-  /// 成功したら端末に保存した資格情報も破棄するため、以後は次回起動時に
-  /// 新しい匿名ユーザーとして登録し直される（＝別人として再出発する）。
+  /// 成功後は利用状態を解除し、本人が初回画面から再登録するまで自動登録しない。
   static Future<bool> deleteAccount() async {
-    if (!isReady) return true; // 未登録なら消すものが無い
+    await init();
+    if (!isReady) return false;
     try {
       final res = await client
           .delete(Uri.parse('$apiBaseUrl/account'), headers: _headers)
@@ -405,12 +441,21 @@ class ApiService {
       debugPrint('[Api] deleteAccount: $e');
       return false;
     }
+    // Prevent a timer from recreating the account during credential cleanup.
+    selfDeleted = true;
+    AccountSnapshot.locked = true;
     await _store.delete(key: _keyApiKey);
     await _store.delete(key: _keyUserId);
     _apiKey = null;
     _userId = null;
-    _initFuture = null; // 次回 init() で新規登録できるようにする
-    debugPrint('[Api] account deleted');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(deletedKey, true);
+    await prefs.setBool(blockedKey, true);
+    await prefs.setBool(resetPendingKey, true);
+    selfDeleted = true;
+    AccountSnapshot.locked = true;
+    accountBlocked.value = true;
+    debugPrint('[Api] account deleted; waiting for explicit new registration');
     return true;
   }
 

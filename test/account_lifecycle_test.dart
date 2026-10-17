@@ -62,6 +62,7 @@ void main() {
     var deleted = false;
     var reconnects = 0;
     ApiService.client = MockClient((request) async {
+      if (request.method == 'DELETE') return http.Response('{}', 200);
       if (request.url.path.endsWith('/auth/anon')) {
         signups++;
         return http.Response(
@@ -114,6 +115,24 @@ void main() {
         'saved profile');
     expect((await SharedPreferences.getInstance()).getString('encounters_v1'),
         'saved history');
+    // Self-deletion must not recreate a user on the next timer/API request.
+    await ApiService.deleteAccount();
+    expect(ApiService.accountBlocked.value, isTrue);
+    await ApiService.issueToken();
+    expect(signups, 1);
+    expect(
+        (await SharedPreferences.getInstance()).getBool(ApiService.deletedKey),
+        isTrue);
+    await ApiService.releaseBlockedAccount();
+    await AccountSnapshot.clear();
+    expect(secure['account_recovery_v1'], isNull);
+    expect(secure['account_quarantine_v1'], isNull);
+    expect((await SharedPreferences.getInstance()).getString('own_profile_v1'),
+        isNull);
+    await ApiService.beginNewAccount();
+    await ApiService.init();
+    expect(ApiService.accountBlocked.value, isFalse);
+    expect(signups, 2);
     AccountSnapshot.locked = false;
   });
 }

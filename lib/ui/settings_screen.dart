@@ -61,7 +61,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _encounterEnabled = value);
     await NotificationService.setPref(
         NotificationService.prefEncounterEnabled, value);
-    if (value) await NotificationService.scheduleGateNotifications();
+    await NotificationService.scheduleGateNotifications();
   }
 
   Future<void> _toggleBanner(bool value) async {
@@ -102,12 +102,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('サーバーのデータを削除'),
+        title: const Text('アカウントを削除'),
         content: const Text(
           'サーバーに保存されている、あなたの名前・アバターの色・ドット絵・'
           '自己紹介を完全に削除します。\n\n'
           '削除すると、これから先あなたとすれ違った人には'
           'あなたの情報が表示されなくなります。\n\n'
+          '端末のプロフィール・履歴・図鑑・カケラ・バッジも削除し、初期画面へ戻ります。\n'
+          '必要なデータは、先に設定からエクスポートしてください。\n\n'
           'この操作は取り消せません。',
         ),
         actions: [
@@ -415,9 +417,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('サーバーのデータを削除',
+              title: const Text('アカウントを削除',
                   style: TextStyle(color: Colors.red)),
-              subtitle: const Text('名前・アバター・ドット絵・自己紹介をサーバーから消します（取り消せません）'),
+              subtitle: const Text('サーバーのアカウントと端末の利用データを削除します（取り消せません）'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _onDeleteServerData,
             ),

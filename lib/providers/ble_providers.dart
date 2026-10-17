@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/ble_config.dart';
-import '../core/peer_id.dart';
 import '../models/app_badge.dart';
 import '../models/dot_avatar.dart';
 import '../models/own_profile.dart';
@@ -345,7 +344,8 @@ class AppNotifier extends Notifier<AppState> {
     final statuses = await permissions.request();
 
     final denied = statuses.entries
-        .where((e) => e.value.isDenied || e.value.isPermanentlyDenied)
+        .where((e) => e.key != Permission.notification &&
+            (e.value.isDenied || e.value.isPermanentlyDenied))
         .map((e) => e.key.toString())
         .toList();
 
@@ -394,7 +394,7 @@ class AppNotifier extends Notifier<AppState> {
       await _advertiser.startForegroundService();
       state = state.copyWith(isRunning: true, errorMessage: null);
       _starting = false; // isRunning=true になったのでロック解放
-      debugPrint('[App] cycle started peerId=${PeerId.hex}');
+      debugPrint('[App] cycle started');
 
       _startCycle();
       _startAutoResolve();
@@ -568,10 +568,16 @@ class AppNotifier extends Notifier<AppState> {
         return;
       }
       final badgeLevel = AppBadge.badgeLevelFrom(state.badges);
-      final tokenBytes = Uint8List.fromList(TokenService.tokenBytes);
-      // Phase3: 現在の使い捨てトークンをBLEに流す（オフライン時はPeerIdにフォールバック）
-      _scanner.setOwnTokenHex(TokenService.hexToken);
-      await _advertiser.startAdvertise(tokenBytes, profile.toScanPayload(badgeLevel: badgeLevel));
+      await TokenService.ensureFresh();
+      if (!_cycleActive || _userStopped || ApiService.accountBlocked.value) return;
+      if (TokenService.canAdvertise) {
+        final tokenBytes = Uint8List.fromList(TokenService.tokenBytes);
+        _scanner.setOwnTokenHex(TokenService.hexToken);
+        await _advertiser.startAdvertise(tokenBytes, profile.toScanPayload(badgeLevel: badgeLevel));
+      } else {
+        // Offline discovery still works; never broadcast an unresolvable fixed ID.
+        await _advertiser.stopAdvertise();
+      }
       await _scanner.start();
       debugPrint('[Cycle] BLE ON — ${kScanOnSeconds}s badge=$badgeLevel');
     } catch (e) {
@@ -665,7 +671,7 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> _onEncounter(EncounterEvent event) async {
     // Phase3: スキャンしたトークンをローカルキューに保存（サーバーで解析）
-    PendingScanStorage.add(event.peerId, event.time);
+    await PendingScanStorage.add(event.peerId, event.time);
 
     // サーバーファースト: BLEにプロフィールが含まれている場合のみ即座にEncounterRecord作成
     // トークンのみの場合はサーバー解析後にEncounterRecordが作成される
@@ -722,26 +728,29 @@ class AppNotifier extends Notifier<AppState> {
     int peerBadgeLevel = 0,
     String? avatarUrl,
     List<int>? peerPixels,
+    DateTime? metAt,
   }) async {
-    final now  = DateTime.now();
+    final now = metAt ?? DateTime.now();
     final list = List<EncounterRecord>.from(state.encounters);
     final idx  = list.indexWhere((e) => e.peerId == peerId);
 
     if (idx >= 0) {
       final existing = list.removeAt(idx);
-      final newMeetCount =
-          existing.metToday ? existing.meetCount : existing.meetCount + 1;
+      final newer = now.isAfter(existing.lastMet);
+      final newDay = newer && (now.year != existing.lastMet.year ||
+          now.month != existing.lastMet.month || now.day != existing.lastMet.day);
+      final newMeetCount = existing.meetCount + (newDay ? 1 : 0);
       list.insert(0, EncounterRecord(
         peerId:         existing.peerId,
         name:           name,
         colorIndex:     existing.colorIndex,
         prefecture:     prefecture != -1 ? prefecture : existing.prefecture,
-        firstMet:       existing.firstMet,
-        lastMet:        now,
+        firstMet:       now.isBefore(existing.firstMet) ? now : existing.firstMet,
+        lastMet:        newer ? now : existing.lastMet,
         meetCount:      newMeetCount,
         rssi:           rssi,
         template:       template,
-        isRevealed:     existing.isRevealed && existing.metToday,
+        isRevealed:     existing.isRevealed && !newDay,
         peerBadgeLevel: peerBadgeLevel > 0 ? peerBadgeLevel : existing.peerBadgeLevel,
         avatarUrl:      avatarUrl ?? existing.avatarUrl,
         peerPixels:     peerPixels ?? existing.peerPixels, // ドット絵は最新を保持
@@ -789,6 +798,7 @@ class AppNotifier extends Notifier<AppState> {
       peerBadgeLevel: badgeLevel,
       avatarUrl: avatarUrl,
       peerPixels: pixels,
+      metAt: metAt,
     );
   }
 

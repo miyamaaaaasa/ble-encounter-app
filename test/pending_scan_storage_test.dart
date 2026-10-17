@@ -23,6 +23,17 @@ void main() {
     expect((await PendingScanStorage.getAllTokens()).length, 1);
   });
 
+  test('simultaneous BLE discoveries and queue removal do not lose tokens', () async {
+    await PendingScanStorage.add('resolved', DateTime.now());
+    await Future.wait([
+      for (var i = 0; i < 50; i++)
+        PendingScanStorage.add('parallel-$i', DateTime.now()),
+      PendingScanStorage.removeTokens(['resolved']),
+    ]);
+    expect((await PendingScanStorage.getAllTokens()).toSet(),
+        {for (var i = 0; i < 50; i++) 'parallel-$i'});
+  });
+
   test('【回帰】古いトークンが時間経過で消えない（開門まで保持仕様）', () async {
     // かつて48時間で自動削除され「翌日に消える」原因になった
     final old = DateTime.now().subtract(const Duration(days: 10));

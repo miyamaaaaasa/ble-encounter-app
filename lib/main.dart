@@ -25,7 +25,7 @@ void main() async {
   // Heavy: timezone DB load + plugin init runs after first frame
   NotificationService.init();
 
-  // 自前APIサーバー + 回転トークン初期化（オフライン時は永続PeerIdにフォールバック）
+  // 自前APIサーバー + 回転トークン初期化（有効トークンがない場合は広告を保留）
   try {
     await ApiService.init();
     await TokenService.init();

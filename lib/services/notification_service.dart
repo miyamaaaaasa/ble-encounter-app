@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_10y.dart' as tz;
@@ -9,39 +9,50 @@ class NotificationService {
 
   static Future<void> cancelAccountNotifications() => _plugin.cancelAll();
 
-  static const dailyChannelId     = 'daily_result';
-  static const eventChannelId     = 'event_info';
+  static const dailyChannelId = 'daily_result';
+  static const eventChannelId = 'event_info';
   static const encounterChannelId = 'encounter_detect';
 
   static const _gateNotifBase = 100;
 
   static const prefEncounterEnabled = 'notif_encounter_enabled';
-  static const prefUpdateEnabled    = 'notif_update_enabled';
-  static const prefEventEnabled     = 'notif_event_enabled';
-  static const prefSoundEnabled     = 'notif_sound_enabled';
+  static const prefUpdateEnabled = 'notif_update_enabled';
+  static const prefEventEnabled = 'notif_event_enabled';
+  static const prefSoundEnabled = 'notif_sound_enabled';
   static const prefVibrationEnabled = 'notif_vibration_enabled';
   // すれ違い検知通知（バナーと同タイミング、10-30分後）
-  static const prefBannerEnabled    = 'notif_banner_enabled';
+  static const prefBannerEnabled = 'notif_banner_enabled';
 
   // 3開門時刻（固定: 朝9時, 昼12時, 夜21時）
   static const gateHours = [9, 12, 21];
 
   static bool _initialized = false;
+  static Future<void>? _initializing;
 
   static void Function()? onDailyNotificationTap;
 
   static tz.Location _location() {
-    try { return tz.local; } catch (_) {}
-    try { return tz.getLocation('Asia/Tokyo'); } catch (_) {}
+    try {
+      return tz.local;
+    } catch (_) {}
+    try {
+      return tz.getLocation('Asia/Tokyo');
+    } catch (_) {}
     return tz.UTC;
   }
 
   static Future<void> init() async {
     if (_initialized) return;
-    _initialized = true;
+    await (_initializing ??=
+        _initialize().whenComplete(() => _initializing = null));
+  }
+
+  static Future<void> _initialize() async {
     try {
       tz.initializeTimeZones();
-      try { tz.setLocalLocation(tz.getLocation('Asia/Tokyo')); } catch (_) {}
+      try {
+        tz.setLocalLocation(tz.getLocation('Asia/Tokyo'));
+      } catch (_) {}
 
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
       const ios = DarwinInitializationSettings(
@@ -63,28 +74,33 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin>();
       await androidImpl?.createNotificationChannel(
         const AndroidNotificationChannel(
-          dailyChannelId, '開門通知',
+          dailyChannelId,
+          '開門通知',
           description: '朝・昼・夜の開門時刻をお知らせします',
           importance: Importance.defaultImportance,
         ),
       );
       await androidImpl?.createNotificationChannel(
         const AndroidNotificationChannel(
-          eventChannelId, 'イベント・お知らせ',
+          eventChannelId,
+          'イベント・お知らせ',
           description: 'アプリからのお知らせ',
           importance: Importance.high,
         ),
       );
       await androidImpl?.createNotificationChannel(
         const AndroidNotificationChannel(
-          encounterChannelId, 'すれ違い検知',
+          encounterChannelId,
+          'すれ違い検知',
           description: 'すれ違いを検知したときに通知します',
           importance: Importance.low,
           enableVibration: false,
           playSound: false,
         ),
       );
+      _initialized = true;
     } catch (e) {
+      _initialized = false;
       debugPrint('[Notif] init error: $e');
     }
   }
@@ -92,11 +108,19 @@ class NotificationService {
   // 朝・昼・夜ゲート通知（3回/日）
   static Future<void> scheduleGateNotifications() async {
     try {
+      await init();
       final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool(prefEncounterEnabled) ?? true)) {
+        for (final hour in gateHours) {
+          await _plugin.cancel(_gateNotifBase + hour);
+        }
+        return;
+      }
+      var usedInexact = false;
       final sound = prefs.getBool(prefSoundEnabled) ?? true;
-      final vibr  = prefs.getBool(prefVibrationEnabled) ?? true;
-      final loc   = _location();
-      final now   = tz.TZDateTime.now(loc);
+      final vibr = prefs.getBool(prefVibrationEnabled) ?? true;
+      final loc = _location();
+      final now = tz.TZDateTime.now(loc);
 
       for (final hour in gateHours) {
         var scheduled = tz.TZDateTime(loc, now.year, now.month, now.day, hour);
@@ -105,7 +129,8 @@ class NotificationService {
         }
         final details = NotificationDetails(
           android: AndroidNotificationDetails(
-            dailyChannelId, '開門通知',
+            dailyChannelId,
+            '開門通知',
             importance: Importance.high,
             priority: Priority.high,
             playSound: sound,
@@ -131,6 +156,7 @@ class NotificationService {
             matchDateTimeComponents: DateTimeComponents.time,
           );
         } catch (_) {
+          usedInexact = true;
           // exact alarm権限が拒否されている端末はinexactにフォールバック
           await _plugin.zonedSchedule(
             _gateNotifBase + hour,
@@ -145,18 +171,19 @@ class NotificationService {
           );
         }
       }
-      debugPrint('[Notif] gate notifications scheduled (exact)');
+      debugPrint(
+          '[Notif] gate notifications scheduled (${usedInexact ? 'inexact fallback' : 'exact'})');
     } catch (e) {
       debugPrint('[Notif] scheduleGateNotifications error: $e');
     }
   }
 
   static String _gateTitle(int hour) => switch (hour) {
-    9  => '朝の開門 🌅',
-    12 => '昼の開門 ☀️',
-    21 => '夜の開門 🌙',
-    _  => '開門通知',
-  };
+        9 => '朝の開門 🌅',
+        12 => '昼の開門 ☀️',
+        21 => '夜の開門 🌙',
+        _ => '開門通知',
+      };
 
   // すれ違い検知通知（切断後 delayMinutes 後）
   static Future<void> scheduleEncounterNotification({
@@ -168,10 +195,10 @@ class NotificationService {
       if (!(prefs.getBool(prefBannerEnabled) ?? true)) return;
 
       final notifId = peerId.hashCode.abs() % 200 + 300;
-      final now     = tz.TZDateTime.now(_location());
-      final at      = now.add(Duration(minutes: delayMinutes));
-      final nextH   = _nextGateHour();
-      final hh      = nextH.toString().padLeft(2, '0');
+      final now = tz.TZDateTime.now(_location());
+      final at = now.add(Duration(minutes: delayMinutes));
+      final nextH = _nextGateHour();
+      final hh = nextH.toString().padLeft(2, '0');
 
       await _plugin.zonedSchedule(
         notifId,
@@ -180,7 +207,8 @@ class NotificationService {
         at,
         NotificationDetails(
           android: const AndroidNotificationDetails(
-            encounterChannelId, 'すれ違い検知',
+            encounterChannelId,
+            'すれ違い検知',
             importance: Importance.low,
             playSound: false,
             enableVibration: false,
@@ -202,7 +230,7 @@ class NotificationService {
 
   static int _nextGateHour() {
     final h = DateTime.now().hour;
-    if (h < 9)  return 9;
+    if (h < 9) return 9;
     if (h < 12) return 12;
     if (h < 21) return 21;
     return 9;
@@ -216,13 +244,16 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       if (!(prefs.getBool(prefEventEnabled) ?? true)) return;
       final sound = prefs.getBool(prefSoundEnabled) ?? true;
-      final vibr  = prefs.getBool(prefVibrationEnabled) ?? true;
+      final vibr = prefs.getBool(prefVibrationEnabled) ?? true;
 
       await _plugin.show(
-        200, title, body,
+        200,
+        title,
+        body,
         NotificationDetails(
           android: AndroidNotificationDetails(
-            eventChannelId, 'イベント・お知らせ',
+            eventChannelId,
+            'イベント・お知らせ',
             importance: Importance.high,
             playSound: sound,
             enableVibration: vibr,
@@ -253,11 +284,11 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       return NotifSettings(
         encounterEnabled: prefs.getBool(prefEncounterEnabled) ?? true,
-        updateEnabled:    prefs.getBool(prefUpdateEnabled) ?? true,
-        eventEnabled:     prefs.getBool(prefEventEnabled) ?? true,
-        soundEnabled:     prefs.getBool(prefSoundEnabled) ?? true,
+        updateEnabled: prefs.getBool(prefUpdateEnabled) ?? true,
+        eventEnabled: prefs.getBool(prefEventEnabled) ?? true,
+        soundEnabled: prefs.getBool(prefSoundEnabled) ?? true,
         vibrationEnabled: prefs.getBool(prefVibrationEnabled) ?? true,
-        bannerEnabled:    prefs.getBool(prefBannerEnabled) ?? true,
+        bannerEnabled: prefs.getBool(prefBannerEnabled) ?? true,
       );
     } catch (_) {
       return NotifSettings();
@@ -275,10 +306,10 @@ class NotifSettings {
 
   NotifSettings({
     this.encounterEnabled = true,
-    this.updateEnabled    = true,
-    this.eventEnabled     = true,
-    this.soundEnabled     = true,
+    this.updateEnabled = true,
+    this.eventEnabled = true,
+    this.soundEnabled = true,
     this.vibrationEnabled = true,
-    this.bannerEnabled    = true,
+    this.bannerEnabled = true,
   });
 }

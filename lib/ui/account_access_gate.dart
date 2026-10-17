@@ -131,13 +131,20 @@ class _AccountAccessGateState extends ConsumerState<AccountAccessGate>
       Padding(
           padding: const EdgeInsets.all(12),
           child: Column(children: [
-            const Text('このアカウントは利用できません。復元後に再接続してください。'),
-            TextButton(
-                onPressed: _reconnecting ? null : _reconnect,
-                child: Text(_reconnecting ? '再接続中…' : '復元したアカウントに再接続')),
+            Text(ApiService.selfDeleted
+                ? 'アカウントを削除しました。'
+                : 'このアカウントは利用できません。復元後に再接続してください。'),
+            if (!ApiService.selfDeleted)
+              TextButton(
+                  onPressed: _reconnecting ? null : _reconnect,
+                  child: Text(_reconnecting ? '再接続中…' : '復元したアカウントに再接続')),
             if (_error != null) Text(_error!),
           ])),
-      Expanded(child: OnboardingScreen(onDone: () {
+      Expanded(child: OnboardingScreen(onDone: () async {
+        if (ApiService.selfDeleted) {
+          await ApiService.beginNewAccount();
+          return;
+        }
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('アカウントの復元と再接続が必要です')));
       })),

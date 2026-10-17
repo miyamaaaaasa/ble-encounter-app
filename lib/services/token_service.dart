@@ -1,62 +1,75 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../core/peer_id.dart';
 import 'api_service.dart';
 
-/// BLEで流す使い捨てトークンを管理する。
-/// サーバー未接続時は永続PeerIdにフォールバックし、既存機能を維持する。
+/// Advertise only a valid server-issued rotating token, never a permanent ID.
 class TokenService {
   static const _store = FlutterSecureStorage();
   static const _keyToken = 'ble_token_v1';
   static const _keyExpiry = 'ble_token_expiry_v1';
-
   static String? _token;
   static DateTime? _expiry;
+  static Future<void>? _refreshing;
+  static int _generation = 0;
 
-  // 現在の有効なBLEトークン (hex 32文字 = 16バイト)
-  // サーバー未接続の場合は永続PeerIdを返す（後方互換）
-  static String get hexToken => _token ?? PeerId.hex;
-
-  // BLEペイロード用バイト列 (16バイト)
+  static bool get canAdvertise =>
+      !ApiService.accountBlocked.value &&
+      _token != null &&
+      RegExp(r'^[0-9a-f]{32}$').hasMatch(_token!) &&
+      _expiry != null &&
+      _expiry!.isAfter(DateTime.now());
+  static String get hexToken => canAdvertise ? _token! : '';
   static List<int> get tokenBytes {
+    if (!canAdvertise) throw StateError('No valid advertising token');
     final h = hexToken;
     return List.generate(
         16, (i) => int.parse(h.substring(i * 2, i * 2 + 2), radix: 16));
   }
 
-  static bool get _needsRefresh {
-    if (_token == null) return true;
-    if (_expiry == null) return true;
-    // 有効期限まで2時間未満 → 更新
-    return _expiry!.difference(DateTime.now()).inHours < 2;
+  static Future<void> init() async {
+    final generation = _generation;
+    final token = await _store.read(key: _keyToken);
+    final expiry = DateTime.tryParse(await _store.read(key: _keyExpiry) ?? '');
+    if (generation != _generation || ApiService.accountBlocked.value) return;
+    _token = token;
+    _expiry = expiry;
+    await ensureFresh();
   }
 
-  static Future<void> init() async {
-    _token = await _store.read(key: _keyToken);
-    final e = await _store.read(key: _keyExpiry);
-    if (e != null) _expiry = DateTime.tryParse(e);
-
-    if (_needsRefresh) await refresh();
+  static Future<void> ensureFresh() async {
+    if (!canAdvertise ||
+        _expiry!.difference(DateTime.now()) < const Duration(hours: 2)) {
+      await refresh();
+    }
   }
 
   static Future<void> clear() async {
+    _generation++;
     _token = null;
     _expiry = null;
+    try {
+      await _refreshing;
+    } catch (_) {/* Still clear expired credentials. */}
     await _store.delete(key: _keyToken);
     await _store.delete(key: _keyExpiry);
   }
 
-  static Future<void> refresh() async {
-    final newToken = await ApiService.issueToken();
-    if (newToken == null) {
-      debugPrint('[Token] refresh failed → using permanent PeerId');
+  static Future<void> refresh() =>
+      _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+  static Future<void> _refresh() async {
+    final generation = _generation;
+    final next = await ApiService.issueToken();
+    if (generation != _generation || ApiService.accountBlocked.value) return;
+    if (next == null || !RegExp(r'^[0-9a-f]{32}$').hasMatch(next)) {
+      debugPrint(
+          '[Token] no replacement; only an unexpired token may advertise');
       return;
     }
-    _token = newToken;
-    _expiry = DateTime.now().add(const Duration(hours: 24));
-    await _store.write(key: _keyToken, value: _token);
-    await _store.write(key: _keyExpiry, value: _expiry!.toIso8601String());
-    debugPrint(
-        '[Token] refreshed: ${_token!.substring(0, 8)}... expires $_expiry');
+    final expiry = DateTime.now().add(const Duration(hours: 24));
+    await _store.write(key: _keyToken, value: next);
+    await _store.write(key: _keyExpiry, value: expiry.toIso8601String());
+    if (generation != _generation || ApiService.accountBlocked.value) return;
+    _token = next;
+    _expiry = expiry;
   }
 }
