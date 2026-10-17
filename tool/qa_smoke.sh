@@ -43,7 +43,7 @@ sleep 6
 
 # A live process behind a locked screen is not a UI test.
 foreground() {
-  A shell dumpsys window windows 2>/dev/null | tr -d '\r' \
+  A shell dumpsys window 2>/dev/null | tr -d '\r' \
     | grep -Eq 'mCurrentFocus=.*jp\.hajimemashite\.app/.*MainActivity'
 }
 foreground || { echo "NG: unlock device and open sure.; no taps sent"; exit 1; }

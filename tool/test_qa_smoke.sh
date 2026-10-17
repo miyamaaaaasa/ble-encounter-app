@@ -3,7 +3,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 eval "$(sed -n '/^foreground() {/,/^}/p' tool/qa_smoke.sh)"
-A() { printf '%s\n' "$FOCUS"; }
+A() { [ "$*" = "shell dumpsys window" ] || return 1; printf '%s\n' "$FOCUS"; }
 FOCUS='mCurrentFocus=Window{abc u0 jp.hajimemashite.app/jp.hajimemashite.app.MainActivity}'
 foreground || exit 1
 FOCUS='mCurrentFocus=Window{abc u0 com.android.systemui/.EmergencyDialer}'

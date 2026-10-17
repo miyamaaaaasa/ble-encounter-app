@@ -42,6 +42,7 @@ Gate2/3 で NG → 修正して Gate1 からやり直し。コミットしない
 | self | 名前・ドット絵・自己紹介、編集・設定への導線 |
 | バッジ/カケラ/設定 | 上記タブからの移動先で保存/復元・夜空・通知設定・削除を確認 |
 
+Android7/14共通で `dumpsys window` のmCurrentFocusを確認する（`dumpsys window windows` はAndroid14で情報が欠落する）。
 実機がロック中なら操作を停止し、本人のロック解除を待つ。PINを取得しない。
 `bash tool/test_qa_smoke.sh` はロック画面/欠落focus/正常VMログの誤判定を防ぐ回帰検査。
 インストール失敗をskipしない。古い端末は非ストリーミングで更新し、uninstallやclear dataで既存データを消さない。
