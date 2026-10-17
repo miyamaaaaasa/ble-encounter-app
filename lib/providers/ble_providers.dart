@@ -83,6 +83,8 @@ class AppNotifier extends Notifier<AppState> {
 
   final _notifScheduled = <String, DateTime>{};
   bool _userStopped = false;
+  static const _userStoppedKey = 'ble_user_stopped_v1';
+  bool get userStopped => _userStopped;
 
   bool   _cycleActive    = false;
   bool   _cycleOnActive  = false;
@@ -171,6 +173,7 @@ class AppNotifier extends Notifier<AppState> {
 
     // スキャン間隔を復元
     final prefs = await SharedPreferences.getInstance();
+    _userStopped = prefs.getBool(_userStoppedKey) ?? false;
     final savedInterval = prefs.getInt(ScanIntervalX.prefKey) ?? ScanInterval.two.index;
     _scanInterval = ScanIntervalX.fromIndex(savedInterval);
     ref.read(scanIntervalProvider.notifier).state = _scanInterval;
@@ -249,6 +252,7 @@ class AppNotifier extends Notifier<AppState> {
   }
 
   Future<void> _autoStart() async {
+    if (_userStopped) return;
     final ok = await requestPermissions();
     if (ok) await start();
   }
@@ -328,6 +332,7 @@ class AppNotifier extends Notifier<AppState> {
   }
 
   Future<bool> requestPermissions() async {
+    final needsLegacyLocation = await _needsLegacyLocationPermission();
     // iOS: bluetoothScan/Advertise/Connect は NSBluetoothAlwaysUsageDescription にマッピングされる
     // Android: 個別権限が必要
     final permissions = [
@@ -337,7 +342,7 @@ class AppNotifier extends Notifier<AppState> {
       // 位置情報は Android 11 以下でのみ BLE スキャンに必要。
       // Android 12+ ではマニフェスト側で maxSdkVersion=30 にしており権限自体が
       // 存在しないため、要求すると常に拒否扱いになり誤ったエラーが出る。
-      if (await _needsLegacyLocationPermission()) Permission.locationWhenInUse,
+      if (needsLegacyLocation) Permission.locationWhenInUse,
       Permission.notification,
     ];
 
@@ -346,11 +351,17 @@ class AppNotifier extends Notifier<AppState> {
     final denied = statuses.entries
         .where((e) => e.key != Permission.notification &&
             (e.value.isDenied || e.value.isPermanentlyDenied))
-        .map((e) => e.key.toString())
+        .map((e) => e.key)
         .toList();
 
     if (denied.isNotEmpty) {
-      state = state.copyWith(errorMessage: '許可が必要です: ${denied.join(', ')}');
+      state = state.copyWith(errorMessage: denied.contains(Permission.locationWhenInUse)
+          ? 'Bluetoothと位置情報の許可が必要です。端末のアプリ設定を確認してください。GPSは取得しません。'
+          : 'Bluetoothの許可が必要です。端末のアプリ設定を確認してください。');
+      return false;
+    }
+    if (needsLegacyLocation && !await Permission.locationWhenInUse.serviceStatus.isEnabled) {
+      state = state.copyWith(errorMessage: 'このAndroidでは、すれ違い検出に端末全体の位置情報設定をオンにする必要があります。アプリはGPSを取得しません。オンにして「起動」を押してください。');
       return false;
     }
     return true;
@@ -360,6 +371,7 @@ class AppNotifier extends Notifier<AppState> {
 
   Future<void> start() async {
     _userStopped = false;
+    await (await SharedPreferences.getInstance()).setBool(_userStoppedKey, false);
     if (state.isRunning || _starting) return;
     _starting = true;
     final profile = state.ownProfile;
@@ -603,8 +615,11 @@ class AppNotifier extends Notifier<AppState> {
 
   // ─── Stop ────────────────────────────────────────────────────────────────
 
-  Future<void> stop() async {
+  Future<void> stop({bool remember = true}) async {
     _userStopped = true;
+    if (remember) {
+      await (await SharedPreferences.getInstance()).setBool(_userStoppedKey, true);
+    }
     if (!state.isRunning) return;
     _stopCycle(); // サイクルタイマーをキャンセル
     await _encounterSub?.cancel();

@@ -61,6 +61,9 @@ void main() {
     String? capturedRecovery;
     var deleted = false;
     var reconnects = 0;
+    String? serverRecovery;
+    var loseReconnectResponse = true;
+    var loseEnrollmentResponse = true;
     ApiService.client = MockClient((request) async {
       if (request.method == 'DELETE') return http.Response('{}', 200);
       if (request.url.path.endsWith('/auth/anon')) {
@@ -71,6 +74,11 @@ void main() {
       if (request.url.path.endsWith('/account/session')) {
         final m = jsonDecode(request.body) as Map;
         capturedRecovery = m['recovery_key'] as String;
+        serverRecovery = capturedRecovery;
+        if (loseEnrollmentResponse) {
+          loseEnrollmentResponse = false;
+          throw http.ClientException('Enrollment reply lost after commit');
+        }
         return http.Response(deleted ? ' {"error":"account_inactive"}' : '{}',
             deleted ? 403 : 200);
       }
@@ -79,6 +87,18 @@ void main() {
       }
       if (request.url.path.endsWith('/auth/reconnect')) {
         reconnects++;
+        final body = jsonDecode(request.body) as Map;
+        final replacement = body['new_recovery_key'];
+        expect(replacement, matches(RegExp(r'^[0-9a-f]{64}$')));
+        expect(replacement, isNot(body['recovery_key']));
+        if (body['recovery_key'] != serverRecovery) {
+          return http.Response('{"error":"reconnection unavailable"}', 401);
+        }
+        serverRecovery = replacement as String;
+        if (loseReconnectResponse) {
+          loseReconnectResponse = false;
+          throw http.ClientException('Response lost after server commit');
+        }
         return http.Response(
             jsonEncode(
                 {'api_key': 'c' * 64, 'user_id': 'b' * 32, 'archive': ''}),
@@ -89,6 +109,8 @@ void main() {
     await ApiService.checkAccount();
     expect(signups, 1);
     expect(capturedRecovery, isNotNull);
+    expect(secure['account_recovery_v1'], capturedRecovery,
+        reason: 'Enrollment proof must survive a lost server reply');
     expect(await ApiService.syncProfile(displayName: '禁止語123', colorIndex: 0),
         isFalse);
     expect(ApiService.profileError, 'この名前は使用できません');
@@ -107,8 +129,16 @@ void main() {
         .saveOwnProfile(const OwnProfile(name: 'stale', colorIndex: 0));
     expect((await SharedPreferences.getInstance()).getString('own_profile_v1'),
         isNull);
-    expect(await ApiService.reconnectAccount(), isTrue);
-    expect(reconnects, 1);
+    await expectLater(
+        ApiService.reconnectAccount(), throwsA(isA<http.ClientException>()));
+    expect(secure['account_recovery_pending_v1'], serverRecovery);
+    expect(ApiService.accountBlocked.value, isTrue);
+    final attempts = await Future.wait(
+        [ApiService.reconnectAccount(), ApiService.reconnectAccount()]);
+    expect(attempts, everyElement(isTrue));
+    expect(reconnects, 3);
+    expect(secure['account_recovery_v1'], serverRecovery);
+    expect(secure['account_recovery_pending_v1'], isNull);
     expect(secure['api_key_v1'], 'c' * 64);
     expect(secure['api_key_v1'], isNot('a' * 64));
     expect((await SharedPreferences.getInstance()).getString('own_profile_v1'),

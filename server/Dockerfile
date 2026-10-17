@@ -1,15 +1,15 @@
 # 多段ビルド: ホストにGoツールチェーンを入れずに静的バイナリを作る。
 # 最終イメージは scratch ベースで約15MB（ディスク節約）。
-FROM golang:1.23-alpine AS build
+FROM golang:1.27.2-alpine AS build
 WORKDIR /src
 
 # 依存だけ先に取得してレイヤキャッシュを効かせる
 COPY go.mod go.sum* ./
-RUN go mod download 2>/dev/null || true
+RUN go mod download
 
 COPY *.go ./
-RUN go mod tidy && \
-    CGO_ENABLED=0 GOOS=linux go build \
+RUN go mod verify && \
+    GOMAXPROCS=1 CGO_ENABLED=0 GOOS=linux go build -p=1 \
       -trimpath -ldflags="-s -w" -o /out/api .
 
 # 実行ユーザー(10001)が書ける /data をイメージ内に用意しておく。

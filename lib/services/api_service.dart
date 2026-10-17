@@ -50,6 +50,7 @@ class ApiService {
   static const deletedKey = 'account_deleted_v1';
   static bool selfDeleted = false;
   static const recoveryKey = 'account_recovery_v1';
+  static const _pendingRecoveryKey = 'account_recovery_pending_v1';
   static const resetPendingKey = 'account_reset_pending_v1';
   static const quarantineKey = 'account_quarantine_v1';
   static const archiveSecretKey = 'account_archive_secret_v1';
@@ -63,6 +64,13 @@ class ApiService {
   /// 起動のたびに別人格が量産される（＝発行したトークンが解決できなくなる）。
   static Future<void>? _initFuture;
   static Future<bool>? _signUpFuture;
+  static Future<bool>? _reconnectFuture;
+
+  static String _newRecovery() {
+    final rng = Random.secure();
+    return List.generate(
+        32, (_) => rng.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  }
 
   static String? get userId => _userId;
   static bool get isReady => _apiKey != null && _userId != null;
@@ -171,10 +179,8 @@ class ApiService {
     try {
       var recovery = await _store.read(key: recoveryKey);
       if (recovery == null) {
-        final rng = Random.secure();
-        recovery = List.generate(
-                32, (_) => rng.nextInt(256).toRadixString(16).padLeft(2, '0'))
-            .join();
+        recovery = _newRecovery();
+        await _store.write(key: recoveryKey, value: recovery);
       }
       final archive = await AccountSnapshot.capture();
       var secret = await _store.read(key: archiveSecretKey);
@@ -212,6 +218,7 @@ class ApiService {
         _keyApiKey,
         _keyUserId,
         recoveryKey,
+        _pendingRecoveryKey,
         quarantineKey,
         archiveSecretKey
       ]) {
@@ -252,14 +259,32 @@ class ApiService {
     accountBlocked.value = false;
   }
 
-  static Future<bool> reconnectAccount() async {
-    final recovery = await _store.read(key: recoveryKey);
+  static Future<bool> reconnectAccount() => _reconnectFuture ??=
+      _reconnectAccount().whenComplete(() => _reconnectFuture = null);
+
+  static Future<bool> _reconnectAccount() async {
+    await _prepareTransport();
+    var recovery = await _store.read(key: recoveryKey);
     if (recovery == null) return false;
-    final res = await client
+    var next = await _store.read(key: _pendingRecoveryKey) ?? _newRecovery();
+    if (next == recovery) next = _newRecovery();
+    // Persist before the request: the server may commit even if its reply is lost.
+    await _store.write(key: _pendingRecoveryKey, value: next);
+    Future<http.Response> request() => client
         .post(Uri.parse('$apiBaseUrl/auth/reconnect'),
             headers: {'Content-Type': 'application/json; charset=utf-8'},
-            body: jsonEncode({'recovery_key': recovery}))
+            body: jsonEncode(
+                {'recovery_key': recovery, 'new_recovery_key': next}))
         .timeout(_timeout);
+    var res = await request();
+    if (res.statusCode == 401) {
+      // The old proof was consumed. Retry with the durable replacement.
+      recovery = next;
+      next = _newRecovery();
+      await _store.write(key: recoveryKey, value: recovery);
+      await _store.write(key: _pendingRecoveryKey, value: next);
+      res = await request();
+    }
     if (res.statusCode != 200) return false;
     final m = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
     final local = await _store.read(key: quarantineKey);
@@ -273,8 +298,11 @@ class ApiService {
     await AccountSnapshot.restore(archive);
     await _store.write(key: _keyApiKey, value: m['api_key'] as String);
     await _store.write(key: _keyUserId, value: m['user_id'] as String);
+    await _store.write(key: recoveryKey, value: next);
+    await _store.delete(key: _pendingRecoveryKey);
     _apiKey = m['api_key'] as String;
     _userId = m['user_id'] as String;
+    _lastSnapshot = null;
     await (await SharedPreferences.getInstance()).remove(blockedKey);
     await _store.delete(key: quarantineKey);
     _initFuture = Future.value();

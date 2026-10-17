@@ -274,6 +274,15 @@ class NotificationService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(key, value);
+      if (key == prefBannerEnabled && !value) {
+        await init();
+        for (final notification
+            in await _plugin.pendingNotificationRequests()) {
+          if (notification.id >= 300 && notification.id < 500) {
+            await _plugin.cancel(notification.id);
+          }
+        }
+      }
     } catch (e) {
       debugPrint('[Notif] setPref: $e');
     }

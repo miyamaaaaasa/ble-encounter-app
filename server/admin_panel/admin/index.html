@@ -211,12 +211,13 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
-  // トークンはこの端末のブラウザにのみ保存する（サーバーへは送信のたびに送るだけ）。
-  // プライベートウィンドウやサイトデータ遮断時は localStorage 自体が例外を投げる。
+  // 管理者トークンはタブ内だけで保持し、ブラウザへ永続保存しない。
+  try { localStorage.removeItem('admin_token'); } catch (_) {}
+  // サイトデータ遮断時は sessionStorage 自体が例外を投げる。
   // 素で呼ぶと以降のスクリプトが丸ごと止まり、ボタンが無反応になるため必ず包む。
   const storage = {
-    get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 保存できなくても操作は可能 */ } },
+    get(k) { try { return sessionStorage.getItem(k) || ''; } catch (e) { return ''; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch (e) { /* 保存できなくても操作は可能 */ } },
   };
   $('token').value = storage.get('admin_token');
   $('token').addEventListener('change', () => storage.set('admin_token', $('token').value.trim()));

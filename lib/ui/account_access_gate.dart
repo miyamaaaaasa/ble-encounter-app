@@ -51,7 +51,7 @@ class _AccountAccessGateState extends ConsumerState<AccountAccessGate>
       if (prefs.getBool(ApiService.blockedKey) != true ||
           prefs.getBool(ApiService.resetPendingKey) == true) {
         if (_entered) {
-          await ref.read(appProvider.notifier).stop();
+          await ref.read(appProvider.notifier).stop(remember: false);
           ref.read(appProvider.notifier).dispose();
         }
         await ApiService.releaseBlockedAccount();
@@ -143,6 +143,7 @@ class _AccountAccessGateState extends ConsumerState<AccountAccessGate>
       Expanded(child: OnboardingScreen(onDone: () async {
         if (ApiService.selfDeleted) {
           await ApiService.beginNewAccount();
+          if (mounted) setState(() {});
           return;
         }
         ScaffoldMessenger.of(context)

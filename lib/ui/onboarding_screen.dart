@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,7 +11,7 @@ import 'widgets/sorapi.dart';
 
 /// UI only. The caller still owns initial setup and OS permissions.
 class OnboardingScreen extends StatefulWidget {
-  final VoidCallback onDone;
+  final FutureOr<void> Function() onDone;
   const OnboardingScreen({super.key, required this.onDone});
   static const _prefKey = 'onboarding_done_v1';
   static Future<bool> isDone() async =>
@@ -57,14 +58,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     });
     try {
       await OnboardingScreen.markDone();
-      if (mounted) widget.onDone();
+      if (mounted) await widget.onDone();
     } catch (_) {
       if (mounted) {
         setState(() {
-          _saving = false;
           _error = '保存できませんでした。もう一度お試しください。';
         });
       }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 

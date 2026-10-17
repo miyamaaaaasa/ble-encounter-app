@@ -2,6 +2,7 @@ import 'widgets/ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../core/ble_config.dart';
 import '../providers/ble_providers.dart' show appProvider, scanIntervalProvider;
 import '../providers/theme_provider.dart';
@@ -268,7 +269,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: Text(state.isRunning ? 'スキャン中' : '停止中'),
               subtitle: state.isRunning
                   ? const Text('バックグラウンドでも動作しています')
-                  : const Text('Bluetoothをオンにすると自動で復帰します'),
+                  : Text(state.errorMessage ??
+                      (ref.read(appProvider.notifier).userStopped
+                          ? '手動で停止しています。「起動」で再開します'
+                          : 'Bluetoothをオンにすると自動で復帰します')),
               trailing: state.isRunning
                   ? OutlinedButton(
                       onPressed: () => ref.read(appProvider.notifier).stop(),
@@ -291,6 +295,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       child: const Text('起動'),
                     ),
             ),
+
+            if (state.errorMessage != null)
+              ListTile(
+                leading: const Icon(Icons.settings_outlined),
+                title: const Text('アプリの設定を開く'),
+                onTap: () => openAppSettings(),
+              ),
 
             // ─── 検出タイミング ────────────────────────────────────────────
             Padding(
@@ -417,8 +428,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('アカウントを削除',
-                  style: TextStyle(color: Colors.red)),
+              title:
+                  const Text('アカウントを削除', style: TextStyle(color: Colors.red)),
               subtitle: const Text('サーバーのアカウントと端末の利用データを削除します（取り消せません）'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _onDeleteServerData,
@@ -431,7 +442,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const ListTile(
               leading: Icon(Icons.shield_outlined),
               title: Text('データの扱い'),
-              subtitle: Text('GPS 不使用・BLE のみ・データはデバイス内にのみ保存'),
+              subtitle: Text(
+                  'GPSは使わず、Bluetoothですれ違いを検出します。プロフィールやすれ違い情報はサーバーにも保存し、端末データのバックアップは暗号化して送信します。'),
             ),
             const ListTile(
               leading: Icon(Icons.lock_outline),

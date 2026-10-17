@@ -3,6 +3,8 @@
 日本語名・NGワード・管理者削除・30日ゴミ箱・明示的な新キー再接続を追加。
 DB変更、API、端末復元と世代バックアップの制約は [ACCOUNT_MANAGEMENT.md](../ACCOUNT_MANAGEMENT.md) を参照。
 `accounts.go` と `go.sum` もデプロイ対象。ローカルテストは `go test -v ./...`。
+
+2026-10-17: beta1.13.9のセキュリティ更新を反映。Go1.27.2・x/text0.41.0・x/sys0.44.0、認証復元証明の交換、低速本文のロック回避、全JSON応答のno-store、管理画面のsessionStorage、アクセスログのヘッダー/IP除外を適用。旧形式の再接続は426（通常ログインは維持）。詳細・過去ログ処理の保留は[SECURITY_REVIEW.md](../SECURITY_REVIEW.md)を参照。
 既存管理者認証・バックアップ・共有サーバーの他サービスは維持。
 
 # サーバー（さくらVPS）— Supabaseからの移行

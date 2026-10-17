@@ -61,7 +61,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     if (lifecycle == AppLifecycleState.resumed) {
       final appState = ref.read(appProvider);
-      if (!appState.isRunning && appState.ownProfile != null) {
+      if (!appState.isRunning &&
+          appState.ownProfile != null &&
+          !ref.read(appProvider.notifier).userStopped) {
         ref.read(appProvider.notifier).start();
       }
       // iOSのロック中にネイティブ側が拾ったすれ違いを回収して照合する

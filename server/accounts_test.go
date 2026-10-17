@@ -111,7 +111,7 @@ func TestTrashRestoreAndRevocation(t *testing.T) {
 	if w.Code != 403 {
 		t.Fatal("old key usable", w.Code)
 	}
-	w = call(handleReconnect, "POST", "/v1/auth/reconnect", `{"recovery_key":"`+recovery+`"}`, "", false)
+	w = call(handleReconnect, "POST", "/v1/auth/reconnect", `{"recovery_key":"`+recovery+`","new_recovery_key":"`+randHex(32)+`"}`, "", false)
 	if w.Code != 403 {
 		t.Fatal("pending reconnect", w.Code)
 	}
@@ -120,7 +120,7 @@ func TestTrashRestoreAndRevocation(t *testing.T) {
 	if w.Code != 403 {
 		t.Fatal("revoked key resurrected")
 	}
-	w = call(handleReconnect, "POST", "/v1/auth/reconnect", `{"recovery_key":"`+recovery+`"}`, "", false)
+	w = call(handleReconnect, "POST", "/v1/auth/reconnect", `{"recovery_key":"`+recovery+`","new_recovery_key":"`+randHex(32)+`"}`, "", false)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body)
 	}
@@ -187,7 +187,7 @@ func TestLegacyReconnectAndExactDeadline(t *testing.T) {
 	id, key := user(t, "更新前のユーザー")
 	action(t, id, "trash", 200)
 	action(t, id, "restore", 200)
-	w := call(handleReconnect, "POST", "/v1/auth/reconnect", `{"recovery_key":"`+key+`"}`, "", false)
+	w := call(handleReconnect, "POST", "/v1/auth/reconnect", `{"recovery_key":"`+key+`","new_recovery_key":"`+randHex(32)+`"}`, "", false)
 	if w.Code != 200 {
 		t.Fatal("legacy explicit reconnect", w.Code, w.Body)
 	}

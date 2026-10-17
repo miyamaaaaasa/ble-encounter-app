@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -212,6 +213,7 @@ func randHex(n int) string {
 // ─── 共通ヘルパ ─────────────────────────────────────────────────────────
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -1029,10 +1031,6 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 // ─── ミドルウェア ───────────────────────────────────────────────────────
 func withCommon(next http.HandlerFunc, method string, limited bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if limited {
-			accountMu.RLock()
-			defer accountMu.RUnlock()
-		}
 		if r.Method != method {
 			w.Header().Set("Allow", method)
 			writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -1041,6 +1039,21 @@ func withCommon(next http.HandlerFunc, method string, limited bool) http.Handler
 		if limited && !apiLimiter.allow(clientIP(r)) {
 			writeErr(w, http.StatusTooManyRequests, "rate limited")
 			return
+		}
+		if limited {
+			limit := int64(maxBodyBytes)
+			if r.URL.Path == "/v1/account/session" {
+				limit = 2 * archiveLimit
+			}
+			// Read before the account lock: a slow client must not stall deletion/reconnect.
+			body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "invalid request body")
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			accountMu.RLock()
+			defer accountMu.RUnlock()
 		}
 		if limited && revoked(r) {
 			writeErr(w, http.StatusForbidden, "account_inactive")

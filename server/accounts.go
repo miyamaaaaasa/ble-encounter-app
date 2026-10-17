@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"golang.org/x/text/unicode/norm"
 	"io"
@@ -190,8 +191,6 @@ func handleTrash(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, list)
 }
 func handleUserAction(w http.ResponseWriter, r *http.Request) {
-	accountMu.Lock()
-	defer accountMu.Unlock()
 	if !adminOnly(w, r) {
 		return
 	}
@@ -204,6 +203,8 @@ func handleUserAction(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "confirmation required")
 		return
 	}
+	accountMu.Lock()
+	defer accountMu.Unlock()
 	tx, err := db.Begin()
 	if err != nil {
 		writeErr(w, 500, "db error")
@@ -310,20 +311,31 @@ func validArchive(s string) ([]byte, error) {
 }
 
 func handleReconnect(w http.ResponseWriter, r *http.Request) {
-	accountMu.Lock()
-	defer accountMu.Unlock()
 	if !signupLimiter.allow(clientIP(r)) {
 		writeErr(w, 429, "rate limited")
 		return
 	}
 	var req struct {
-		Recovery string `json:"recovery_key"`
+		Recovery     string `json:"recovery_key"`
+		NextRecovery string `json:"new_recovery_key"`
 	}
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&req) != nil || len(req.Recovery) != 64 {
 		writeErr(w, 401, "reconnection unavailable")
 		return
 	}
+	if len(req.NextRecovery) != 64 || req.NextRecovery == req.Recovery {
+		writeErr(w, http.StatusUpgradeRequired, "update_required")
+		return
+	}
+	if _, err := hex.DecodeString(req.NextRecovery); err != nil {
+		writeErr(w, 400, "bad request")
+		return
+	}
+	// Never hold the cross-account lock while reading an untrusted request body.
+	accountMu.Lock()
+	defer accountMu.Unlock()
 	sum := sha256.Sum256([]byte(req.Recovery))
+	nextHash := sha256.Sum256([]byte(req.NextRecovery))
 	key := randHex(32)
 	hashed := sha256.Sum256([]byte(key))
 	tx, err := db.Begin()
@@ -334,13 +346,22 @@ func handleReconnect(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 	var id string
 	var data []byte
-	if err = tx.QueryRow(`SELECT id,archive FROM users WHERE recovery_hash=? AND deleted_at IS NULL`, sum[:]).Scan(&id, &data); err != nil {
+	var deleted sql.NullInt64
+	if err = tx.QueryRow(`SELECT id,archive,deleted_at FROM users WHERE recovery_hash=?`, sum[:]).Scan(&id, &data, &deleted); err != nil {
+		if err == sql.ErrNoRows {
+			writeErr(w, 401, "reconnection unavailable")
+		} else {
+			writeErr(w, 500, "db error")
+		}
+		return
+	}
+	if deleted.Valid {
 		writeErr(w, 403, "reconnection unavailable")
 		return
 	}
 	// Revoke any prior session, even if reconnect is used without a deletion.
 	if _, err = tx.Exec(`INSERT OR IGNORE INTO revoked_keys(key_hash,user_id) SELECT key_hash,id FROM users WHERE id=?`, id); err == nil {
-		_, err = tx.Exec(`UPDATE users SET key_hash=? WHERE id=? AND deleted_at IS NULL`, hashed[:], id)
+		_, err = tx.Exec(`UPDATE users SET key_hash=?,recovery_hash=? WHERE id=? AND deleted_at IS NULL`, hashed[:], nextHash[:], id)
 	}
 	if err != nil {
 		writeErr(w, 500, "db error")

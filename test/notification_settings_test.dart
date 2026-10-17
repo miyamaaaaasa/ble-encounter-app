@@ -36,4 +36,29 @@ void main() {
     expect(calls.where((c) => c.method == 'zonedSchedule'), isEmpty);
     expect(calls.where((c) => c.method == 'cancel').length, 3);
   });
+  test(
+      'disabling encounters cancels queued encounters but retains other alerts',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final canceled = <int>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel('dexterous.com/flutter/local_notifications'),
+            (call) async {
+      if (call.method == 'initialize') return true;
+      if (call.method == 'pendingNotificationRequests') {
+        return [
+          for (final id in [109, 200, 300, 499, 500])
+            {'id': id, 'title': 'pending', 'body': 'body', 'payload': null}
+        ];
+      }
+      if (call.method == 'cancel') {
+        canceled.add((call.arguments as Map)['id'] as int);
+      }
+      return null;
+    });
+    await NotificationService.setPref(
+        NotificationService.prefBannerEnabled, false);
+    expect(canceled, [300, 499]);
+  });
 }

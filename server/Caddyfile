@@ -45,6 +45,7 @@
 	# 外部リソースの読み込みは引き続き一切禁止。
 	@admin path /admin*
 	header @admin Content-Security-Policy "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+	header @admin Cache-Control "no-store"
 
 	# APIのみ公開。それ以外のパスは404で即返し、探索コストを与えない。
 	handle /v1/* {
@@ -106,7 +107,16 @@
 			roll_size 5mb
 			roll_keep 3
 		}
-		# 個人情報を残さないため、リクエストヘッダは記録しない
-		format json
+		# Custom admin headers are not automatically redacted by Caddy.
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>remote_ip delete
+				request>client_ip delete
+				request>remote_port delete
+				resp_headers delete
+			}
+		}
 	}
 }
