@@ -33,6 +33,8 @@ DEST = VAULT / "projects" / "ble-encounter-app"
 
 # リポジトリ内のドキュメント → vault内での表示名
 DOCS = {
+    "design/world-ui/POLISH_2026-10-18.md": "UI改善・出会い表示・広告UX",
+    "ADS_SETUP.md": "広告導入・全年齢設定・本番切替手順",
     "SECURITY_REVIEW.md": "セキュリティ監査・UX修正・検証範囲",
     "RELEASE_CANDIDATE.md": "リリース候補・実機検証・残課題",
     "BRAND.md": "sure.正式名称・変更範囲",

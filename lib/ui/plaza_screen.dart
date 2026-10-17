@@ -83,14 +83,31 @@ class _PlazaScreenState extends ConsumerState<PlazaScreen> {
           SliverToBoxAdapter(
               child: Padding(
                   padding: const EdgeInsets.all(20),
-                  child: Text('であった人ぜんいん', style: Ts.title))),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('であった人ぜんいん', style: Ts.title),
+                      if (revealed.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text('ドット絵をタップすると、くわしく見られるよ', style: Ts.caption),
+                      ],
+                    ],
+                  ))),
           if (revealed.isEmpty)
             SliverToBoxAdapter(
                 child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: PixelPanel(
-                        child: Text('まだ誰も来ていません\nすれ違って、門をあけてみよう。',
-                            style: Ts.body))))
+                        child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('これから出会うみんなの場所', style: Ts.title),
+                        const SizedBox(height: 8),
+                        Text(
+                            'すれ違ったあとは「今日」で門をあけてみよう。\n出会った人のドット絵とひとことが、ここに集まるよ。',
+                            style: Ts.body),
+                      ],
+                    ))))
           else
             SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -114,11 +131,13 @@ class _ResidentTile extends StatelessWidget {
     final border = rarityBorderColor(rarity);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 12),
       child: SoftPanel(
         onTap: () => EncounterDetailSheet.show(context, encounter),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        radius: 8,
+        padding: const EdgeInsets.all(14),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // レアリティ枠の中にドット絵（主役）
             Container(
@@ -136,7 +155,7 @@ class _ResidentTile extends StatelessWidget {
                 color: rarity != CardRarity.hologram ? border : null,
               ),
               child: PeerIcon(
-                  encounter: encounter, size: 42, circle: false, radius: 11),
+                  encounter: encounter, size: 64, circle: false, radius: 11),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -145,47 +164,58 @@ class _ResidentTile extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Flexible(
+                      Expanded(
                         child: Text(encounter.name,
-                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
                                 color: Palette.ink)),
                       ),
                       if (encounter.peerBadgeLevel > 0) ...[
                         const SizedBox(width: 6),
                         Icon(Icons.workspace_premium,
-                            size: 18, color: Palette.sun),
+                            size: 18,
+                            color: Palette.sun,
+                            semanticLabel: 'バッジあり'),
                       ],
                     ],
                   ),
-                  Row(
+                  const SizedBox(height: 6),
+                  Text(encounter.template.phraseText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Ts.body),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(fmtDate(encounter.lastMet), style: Ts.tiny),
-                      const SizedBox(width: 8),
+                      Text(fmtDate(encounter.lastMet), style: Ts.caption),
                       // 再遭遇回数は抽象ラベルで表示（数字非公開）
                       Text(encounterLabel(encounter.meetCount),
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: Palette.tealDeep)),
+                              color: Palette.inkSoft)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: border.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border:
+                              Border.all(color: border.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(rarityLabel(rarity),
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Palette.ink)),
+                      ),
                     ],
                   ),
                 ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: border.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: border.withValues(alpha: 0.4)),
-              ),
-              child: Text(
-                rarityLabel(rarity),
-                style: TextStyle(
-                    fontSize: 10, fontWeight: FontWeight.w600, color: border),
               ),
             ),
           ],

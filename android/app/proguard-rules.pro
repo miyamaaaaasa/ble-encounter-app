@@ -10,3 +10,8 @@
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 -keep,allowobfuscation class * extends com.google.gson.reflect.TypeToken
+
+# AdMob's transitive Room/WorkManager rules predate R8 strict full mode.
+# These instances are created reflectively, including before Flutter starts.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class * extends androidx.work.InputMerger { <init>(); }

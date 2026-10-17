@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/ble_providers.dart';
 import '../services/notification_service.dart';
+import '../services/ad_service.dart';
+import 'widgets/ad_banner.dart';
 import 'theme/palette.dart';
 import 'widgets/ui_kit.dart';
 import 'widgets/user_icon.dart';
@@ -47,6 +49,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showNewBadgeIfAny();
+      AdService.instance.initialize();
     });
   }
 
@@ -106,25 +109,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             (i) =>
                 TickerMode(enabled: i == _selectedIndex, child: _screens[i])),
       ),
-      bottomNavigationBar: defaultTargetPlatform == TargetPlatform.iOS
-          ? CupertinoTabBar(
-              currentIndex: _selectedIndex,
-              onTap: _selectTab,
-              backgroundColor: Palette.card,
-              activeColor: Palette.sky,
-              inactiveColor: Palette.inkSoft,
-              items: _dockItems
-                  .map((item) => BottomNavigationBarItem(
-                        icon: item.custom ??
-                            Image.asset(item.asset!, width: 26, height: 26),
-                        label: item.label,
-                      ))
-                  .toList())
-          : GameDock(
-              items: _dockItems,
-              selected: _selectedIndex,
-              onSelect: _selectTab,
-            ),
+      bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
+        const PlazaAdBanner(),
+        defaultTargetPlatform == TargetPlatform.iOS
+            ? CupertinoTabBar(
+                currentIndex: _selectedIndex,
+                onTap: _selectTab,
+                backgroundColor: Palette.card,
+                activeColor: Palette.sky,
+                inactiveColor: Palette.inkSoft,
+                items: _dockItems
+                    .map((item) => BottomNavigationBarItem(
+                          icon: item.custom ??
+                              Image.asset(item.asset!, width: 26, height: 26),
+                          label: item.label,
+                        ))
+                    .toList())
+            : GameDock(
+                items: _dockItems,
+                selected: _selectedIndex,
+                onSelect: _selectTab,
+              ),
+      ]),
     );
   }
 }

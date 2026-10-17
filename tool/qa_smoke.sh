@@ -41,6 +41,14 @@ A shell am force-stop jp.hajimemashite.app
 A shell am start -n jp.hajimemashite.app/.MainActivity >/dev/null
 sleep 6
 
+# A provider crash occurs before Flutter can draw; do not misreport it as a lock.
+A logcat -d -s AndroidRuntime:E > "$OUT/startup-errors.txt" 2>/dev/null
+if grep -q 'Process: jp\.hajimemashite\.app' "$OUT/startup-errors.txt"; then
+  echo "NG: native startup crash; see $OUT/startup-errors.txt"
+  tail -25 "$OUT/startup-errors.txt"
+  exit 1
+fi
+
 # A live process behind a locked screen is not a UI test.
 foreground() {
   A shell dumpsys window 2>/dev/null | tr -d '\r' \

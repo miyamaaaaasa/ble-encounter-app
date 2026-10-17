@@ -6,6 +6,7 @@ import '../core/ble_config.dart';
 import '../models/encounter_record.dart';
 import '../providers/ble_providers.dart';
 import '../providers/broadcast_provider.dart';
+import '../services/ad_service.dart';
 import 'encounter_helpers.dart';
 import 'encounter_detail_sheet.dart';
 import 'gate_reveal_screen.dart';
@@ -14,6 +15,7 @@ import 'widgets/peer_icon.dart';
 import 'widgets/pixel_world.dart';
 import 'widgets/ui_kit.dart';
 import 'widgets/sorapi.dart';
+import 'widgets/encounter_highlights.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
@@ -88,26 +90,93 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
   }
 
   Future<void> _open(DateTime gate, List<EncounterRecord> people) async {
-    await Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => GateRevealScreen(
-                encounters: people,
-                date: DateTime.now(),
-                onReveal: () async {
-                  await ref.read(appProvider.notifier).revealToday();
-                  if (!mounted) return;
-                  _bannerTimer?.cancel();
-                  _bannerTimer = null;
-                  setState(() {
-                    _showBanner = false;
-                    _opened.addAll(AppNotifier.gatesToShow(DateTime.now())
-                        .where((g) => !DateTime.now().isBefore(g)));
-                  });
-                  _celebrated.addAll(people.map(
-                      (e) => '${e.peerId}:${e.lastMet.toIso8601String()}'));
-                })));
+    var saved = false;
+    AdService.instance.prepareGateAd();
+    final route = MaterialPageRoute<void>(
+        builder: (_) => GateRevealScreen(
+            encounters: people,
+            date: DateTime.now(),
+            onReveal: () async {
+              await ref.read(appProvider.notifier).revealToday();
+              saved = true;
+              if (!mounted) return;
+              _bannerTimer?.cancel();
+              _bannerTimer = null;
+              setState(() {
+                _showBanner = false;
+                _opened.addAll(AppNotifier.gatesToShow(DateTime.now())
+                    .where((g) => !DateTime.now().isBefore(g)));
+              });
+              _celebrated.addAll(people
+                  .map((e) => '${e.peerId}:${e.lastMet.toIso8601String()}'));
+            }));
+    await Navigator.of(context).push(route);
+    await route.completed;
+    if (mounted && saved && (ModalRoute.of(context)?.isCurrent ?? false)) {
+      await AdService.instance.showAfterGate(gate,
+          canShow: () =>
+              mounted &&
+              TickerMode.of(context) &&
+              (ModalRoute.of(context)?.isCurrent ?? false));
+    }
   }
+
+  Widget _encountersSection(List<EncounterRecord> today, DateTime now) =>
+      SliverToBoxAdapter(
+          child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: PixelPanel(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text('きょうの出会い', style: Ts.title),
+                    const SizedBox(height: 12),
+                    if (today.isEmpty) ...[
+                      Row(
+                          children: List.generate(
+                              4,
+                              (_) => Expanded(
+                                  child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: AspectRatio(
+                                          aspectRatio: 1,
+                                          child: ColoredBox(
+                                              color: Palette.cream,
+                                              child: Center(
+                                                  child: Text('?',
+                                                      style: TextStyle(
+                                                          fontSize: 28,
+                                                          color: Palette
+                                                              .inkSoft))))))))),
+                      const SizedBox(height: 8),
+                      Text('門がひらくと、きょうすれ違った\nみんなに会えるよ！', style: Ts.caption),
+                    ] else ...[
+                      Text('${today.length}人 と出会いました！', style: Ts.heading),
+                      const SizedBox(height: 16),
+                      EncounterHighlights(people: today),
+                      const SizedBox(height: 16),
+                      WorldButton(
+                          label: 'みんなを見る',
+                          secondary: true,
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      EncounterPeopleScreen(people: today)))),
+                      const SizedBox(height: 12),
+                      WorldButton(
+                          label: '結果を見る・シェア',
+                          secondary: true,
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => GateRevealScreen(
+                                      encounters: today,
+                                      date: now,
+                                      resultOnly: true,
+                                      onReveal: () async {})))),
+                    ],
+                  ]))));
 
   @override
   Widget build(BuildContext context) {
@@ -233,14 +302,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                             child: Text('だれかの気配が届いているよ\n次の開門で会えるよ',
                                 style: Ts.body))
                       ])))),
+            if (today.isNotEmpty) _encountersSection(today, now),
             SliverToBoxAdapter(
                 child: Padding(
-                    padding: const EdgeInsets.fromLTRB(36, 40, 36, 24),
+                    padding: EdgeInsets.fromLTRB(
+                        28, today.isEmpty ? 32 : 12, 28, 20),
                     child: Column(children: [
                       SizedBox(
-                          height: 180,
+                          height: today.isEmpty ? 180 : 100,
                           child: Stack(alignment: Alignment.center, children: [
-                            const PixelDoor(),
+                            Transform.scale(
+                                scale: today.isEmpty ? 1 : .6,
+                                child: const PixelDoor()),
                             Positioned(
                                 right: 0,
                                 bottom: 0,
@@ -279,99 +352,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                             label: '門をあける', onTap: () => _open(gate, pending))
                       ],
                     ]))),
-            SliverToBoxAdapter(
-                child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: PixelPanel(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                          Text('きょうの出会い', style: Ts.title),
-                          const SizedBox(height: 12),
-                          if (today.isEmpty) ...[
-                            Row(
-                                children: List.generate(
-                                    4,
-                                    (_) => Expanded(
-                                        child: Padding(
-                                            padding: const EdgeInsets.all(4),
-                                            child: AspectRatio(
-                                                aspectRatio: 1,
-                                                child: ColoredBox(
-                                                    color: Palette.cream,
-                                                    child: Center(
-                                                        child: Text('?',
-                                                            style: TextStyle(
-                                                                fontSize: 28,
-                                                                color: Palette
-                                                                    .inkSoft))))))))),
-                            const SizedBox(height: 8),
-                            Text('門がひらくと、きょうすれ違った\nみんなに会えるよ！',
-                                style: Ts.caption),
-                          ] else ...[
-                            Text('${today.length}人 と出会いました！',
-                                style: Ts.heading),
-                            const SizedBox(height: 16),
-                            SpeechBubble(
-                                color: Palette.card,
-                                text: today.first.template.phraseText,
-                                pixelated: true),
-                            const SizedBox(height: 16),
-                            Wrap(
-                                spacing: 12,
-                                runSpacing: 12,
-                                children: today
-                                    .map((e) => Semantics(
-                                        button: true,
-                                        label: e.name,
-                                        child: GestureDetector(
-                                            onTap: () =>
-                                                EncounterDetailSheet.show(
-                                                    context, e),
-                                            child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  PeerIcon(
-                                                      encounter: e,
-                                                      size: today.length == 1
-                                                          ? 104
-                                                          : 64,
-                                                      circle: false,
-                                                      radius: 4),
-                                                  SizedBox(
-                                                      width: 80,
-                                                      child: Text(e.name,
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          textAlign:
-                                                              TextAlign.center,
-                                                          style: Ts.caption)),
-                                                ]))))
-                                    .toList()),
-                            const SizedBox(height: 16),
-                            WorldButton(
-                                label: 'みんなを見る',
-                                secondary: true,
-                                onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => EncounterPeopleScreen(
-                                            people: today)))),
-                            const SizedBox(height: 12),
-                            WorldButton(
-                                label: '結果を見る・シェア',
-                                secondary: true,
-                                onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => GateRevealScreen(
-                                            encounters: today,
-                                            date: now,
-                                            resultOnly: true,
-                                            onReveal: () async {})))),
-                          ],
-                        ])))),
+            if (today.isEmpty) _encountersSection(today, now),
             SliverToBoxAdapter(
                 child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),

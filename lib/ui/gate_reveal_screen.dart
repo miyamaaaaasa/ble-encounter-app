@@ -358,27 +358,25 @@ class WorldButton extends StatelessWidget {
   const WorldButton(
       {super.key, required this.label, this.onTap, this.secondary = false});
   @override
-  Widget build(BuildContext context) => Semantics(
-      button: true,
-      enabled: onTap != null,
-      child: GestureDetector(
-          onTap: onTap,
-          child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 52),
+  Widget build(BuildContext context) => SizedBox(
+      width: double.infinity,
+      child: TextButton(
+          onPressed: onTap,
+          style: TextButton.styleFrom(
+              minimumSize: const Size(48, 52),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                  color: secondary ? Palette.card : Palette.coralDeep,
-                  border: Border.all(
-                      color: secondary ? Palette.inkFaint : Palette.coral,
-                      width: 2),
+              backgroundColor: secondary ? Palette.card : Palette.coral,
+              foregroundColor: secondary ? Palette.ink : Palette.nightSky,
+              side: BorderSide(
+                  color: secondary ? Palette.inkFaint : Palette.coralDeep,
+                  width: 2),
+              shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
-              child: Text(label,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: secondary ? Palette.ink : Colors.white)))));
+              textStyle: Theme.of(context)
+                  .textTheme
+                  .labelLarge
+                  ?.copyWith(fontSize: 15, fontWeight: FontWeight.w800)),
+          child: Text(label, textAlign: TextAlign.center)));
 }
 
 class EncounterPeopleScreen extends StatelessWidget {

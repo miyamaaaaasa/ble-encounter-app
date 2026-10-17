@@ -1,7 +1,7 @@
 name: ble_encounter
 description: BLEすれ違い検知アプリ
 publish_to: 'none'
-version: 1.13.9+62
+version: 1.13.12+65
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -51,6 +51,7 @@ dependencies:
   # 通知スケジュール
   flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
+  google_mobile_ads: 9.1.0
 
 
 dev_dependencies:

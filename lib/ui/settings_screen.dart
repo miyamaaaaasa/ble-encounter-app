@@ -7,6 +7,8 @@ import '../core/ble_config.dart';
 import '../providers/ble_providers.dart' show appProvider, scanIntervalProvider;
 import '../providers/theme_provider.dart';
 import '../services/api_service.dart';
+import '../services/ad_service.dart';
+import '../core/ads_config.dart';
 import '../services/data_export_service.dart';
 import '../services/game_storage.dart';
 import '../services/notification_service.dart';
@@ -439,6 +441,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             // ─── プライバシー ─────────────────────────────────────────────
             _SectionHeader('プライバシー'),
+            if (AdsConfig.configured)
+              AnimatedBuilder(
+                animation: AdService.instance,
+                builder: (context, _) => Column(children: [
+                  ListTile(
+                    leading: const Icon(Icons.info_outline),
+                    title: const Text('広告について'),
+                    subtitle: Text(AdsConfig.testMode
+                        ? '現在はテスト広告です。広告事業者へIPアドレス・端末情報・広告の表示や操作に関する情報が送信される場合があります。子ども向け・パーソナライズなしで表示します。'
+                        : '子ども向け・パーソナライズなしの広告です。広告事業者へIPアドレス・端末情報・広告の表示や操作に関する情報が送信される場合があります。プロフィールやすれ違い記録は広告配信に使用しません。'),
+                  ),
+                  if (AdService.instance.privacyOptionsRequired)
+                    ListTile(
+                      leading: const Icon(Icons.privacy_tip_outlined),
+                      title: const Text('広告のプライバシー設定'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () async {
+                        try {
+                          await AdService.instance.showPrivacyOptions();
+                        } catch (_) {
+                          if (context.mounted)
+                            ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text('広告の設定を開けませんでした。通信状況を確認してください。')));
+                        }
+                      },
+                    ),
+                ]),
+              ),
             const ListTile(
               leading: Icon(Icons.shield_outlined),
               title: Text('データの扱い'),

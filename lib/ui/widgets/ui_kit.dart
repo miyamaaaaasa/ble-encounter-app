@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/palette.dart';
 
 /// Material Card/AppBar/FAB を使わない独自UIキット。
@@ -36,15 +37,17 @@ class SoftPanel extends StatelessWidget {
       child: child,
     );
     if (onTap == null) return panel;
-    return _Pressable(onTap: onTap!, child: panel);
+    return _Pressable(onTap: onTap!, radius: radius, child: panel);
   }
 }
 
 // タップで沈み込む（ゲーム機ボタンの押し心地）
 class _Pressable extends StatefulWidget {
   final Widget child;
-  final VoidCallback onTap;
-  const _Pressable({required this.child, required this.onTap});
+  final VoidCallback? onTap;
+  final double radius;
+  const _Pressable(
+      {required this.child, required this.onTap, this.radius = 26});
 
   @override
   State<_Pressable> createState() => _PressableState();
@@ -52,26 +55,55 @@ class _Pressable extends StatefulWidget {
 
 class _PressableState extends State<_Pressable> {
   bool _down = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _down = true),
-      onTapCancel: () => setState(() => _down = false),
-      onTapUp: (_) {
-        setState(() => _down = false);
-        widget.onTap();
-      },
-      child: AnimatedScale(
-        scale: _down ? 0.965 : 1.0,
-        duration: const Duration(milliseconds: 80),
-        child: AnimatedSlide(
-          offset: _down ? const Offset(0, 0.015) : Offset.zero,
-          duration: const Duration(milliseconds: 80),
-          child: widget.child,
-        ),
-      ),
-    );
+    final enabled = widget.onTap != null;
+    return Semantics(
+        button: true,
+        enabled: enabled,
+        onTap: widget.onTap,
+        child: FocusableActionDetector(
+            enabled: enabled,
+            mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+            onShowFocusHighlight: (value) => setState(() => _focused = value),
+            shortcuts: const {
+              SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+              SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+            },
+            actions: {
+              ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+                widget.onTap?.call();
+                return null;
+              }),
+            },
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+              onTapCancel: enabled ? () => setState(() => _down = false) : null,
+              onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+              onTap: widget.onTap,
+              child: AnimatedScale(
+                scale: _down ? 0.965 : 1.0,
+                duration: const Duration(milliseconds: 80),
+                child: AnimatedSlide(
+                  offset: _down ? const Offset(0, 0.015) : Offset.zero,
+                  duration: const Duration(milliseconds: 80),
+                  child: Container(
+                    constraints:
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
+                    foregroundDecoration: _focused
+                        ? BoxDecoration(
+                            border: Border.all(color: Palette.ink, width: 2),
+                            borderRadius: BorderRadius.circular(widget.radius))
+                        : null,
+                    child: widget.child,
+                  ),
+                ),
+              ),
+            )));
   }
 }
 
@@ -93,7 +125,7 @@ class ChunkyButton extends StatelessWidget {
     this.emoji,
     this.color,
     this.deepColor,
-    this.labelColor = Colors.white,
+    this.labelColor = Palette.nightSky,
     this.onTap,
     this.expand = true,
   });
@@ -102,8 +134,8 @@ class ChunkyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     final btn = Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 22),
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
       decoration: BoxDecoration(
         color: enabled ? (color ?? Palette.coral) : Palette.inkFaint,
         borderRadius: BorderRadius.circular(26),
@@ -126,17 +158,18 @@ class ChunkyButton extends StatelessWidget {
             Icon(icon, color: labelColor, size: 20),
             const SizedBox(width: 8),
           ],
-          Text(label,
-              style: TextStyle(
-                  color: labelColor,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                  letterSpacing: 0.5)),
+          Flexible(
+              child: Text(label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: labelColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      letterSpacing: 0.5))),
         ],
       ),
     );
-    if (!enabled) return btn;
-    return _Pressable(onTap: onTap!, child: btn);
+    return _Pressable(onTap: onTap, child: btn);
   }
 }
 
@@ -145,28 +178,42 @@ class RoundIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final Color? color;
+  final String? semanticLabel;
   const RoundIconButton({
     super.key,
     required this.icon,
     required this.onTap,
     this.color,
+    this.semanticLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return _Pressable(
-      onTap: onTap,
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: color ?? Palette.card,
-          shape: BoxShape.circle,
-          boxShadow: Palette.lift(),
-        ),
-        child: Icon(icon, size: 21, color: Palette.ink),
-      ),
-    );
+    final label = semanticLabel ??
+        switch (icon) {
+          Icons.undo => '元に戻す',
+          Icons.delete_outline => '消去する',
+          Icons.close => MaterialLocalizations.of(context).closeButtonTooltip,
+          _ => '操作',
+        };
+    return Tooltip(
+        message: label,
+        excludeFromSemantics: true,
+        child: _Pressable(
+          onTap: onTap,
+          radius: 24,
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color ?? Palette.card,
+              shape: BoxShape.circle,
+              boxShadow: Palette.lift(),
+            ),
+            child:
+                Icon(icon, size: 21, color: Palette.ink, semanticLabel: label),
+          ),
+        ));
   }
 }
 
